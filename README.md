@@ -104,7 +104,6 @@ lib/
 
 ---
 
-## 👨‍💻 Author & Maintainer
+## 👨‍💻 Author
 
-**Ibrahim Muliatama** ([@bimbap](https://github.com/bimbap))  
-*Junior Cloud Engineer & Modern Web Developer*
+**Ibrahim Muliatama** ([@bimbap](https://github.com/bimbap))
