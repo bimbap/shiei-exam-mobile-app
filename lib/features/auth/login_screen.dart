@@ -80,64 +80,11 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Pilih preset atau tentukan URL backend Shiei Core / Shiei Panel:',
+                'Tentukan URL backend Shiei Core / Shiei Panel sekolah Anda:',
                 style: TextStyle(
                   color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
                   fontSize: 12.5,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ActionChip(
-                    label: const Text('USB (localhost)'),
-                    backgroundColor: serverController.text.contains('localhost')
-                        ? AppTheme.primaryShiei.withOpacity(0.25)
-                        : (isDark ? AppTheme.surfaceCard : AppTheme.surfaceCardLight),
-                    side: BorderSide(
-                      color: serverController.text.contains('localhost')
-                          ? AppTheme.primaryShiei
-                          : (isDark ? AppTheme.borderSubtle : AppTheme.borderSubtleLight),
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 11.5,
-                      color: serverController.text.contains('localhost')
-                          ? AppTheme.primaryGlow
-                          : (isDark ? Colors.white70 : AppTheme.textSecondaryLight),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    onPressed: () {
-                      setDialogState(() {
-                        serverController.text = 'http://localhost:8000/api/v1';
-                      });
-                    },
-                  ),
-                  ActionChip(
-                    label: const Text('Wi-Fi (192.168.100.8)'),
-                    backgroundColor: serverController.text.contains('192.168.100.8')
-                        ? AppTheme.primaryShiei.withOpacity(0.25)
-                        : (isDark ? AppTheme.surfaceCard : AppTheme.surfaceCardLight),
-                    side: BorderSide(
-                      color: serverController.text.contains('192.168.100.8')
-                          ? AppTheme.primaryShiei
-                          : (isDark ? AppTheme.borderSubtle : AppTheme.borderSubtleLight),
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 11.5,
-                      color: serverController.text.contains('192.168.100.8')
-                          ? AppTheme.primaryGlow
-                          : (isDark ? Colors.white70 : AppTheme.textSecondaryLight),
-                      fontWeight: FontWeight.w600,
-                    ),
-                    onPressed: () {
-                      setDialogState(() {
-                        serverController.text = 'http://192.168.100.8:8000/api/v1';
-                      });
-                    },
-                  ),
-                ],
               ),
               const SizedBox(height: 14),
               TextField(
