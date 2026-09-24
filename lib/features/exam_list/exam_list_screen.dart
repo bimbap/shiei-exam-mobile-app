@@ -170,6 +170,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
     bool isNoExternalDisplay = true;
     bool isNoUsbDebugging = true;
     bool isUsbDebuggingDetected = false;
+    bool isUsbHostConnected = false;
     bool isDeviceIntegrityOk = true;
     String integrityReason = '';
     int brightnessPercent = 50;
@@ -206,6 +207,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 isNoExternalDisplay = true;
                 isNoUsbDebugging = true;
                 isUsbDebuggingDetected = false;
+                isUsbHostConnected = false;
                 isDeviceIntegrityOk = true;
                 integrityReason = '';
                 isBrightnessOk = true;
@@ -260,16 +262,24 @@ class _ExamListScreenState extends State<ExamListScreen> {
               setModalState(() => currentStep = 3);
               await Future.delayed(const Duration(milliseconds: 50));
 
-              // Step 3: USB Debugging Check (ADB)
+              // Step 3: USB Debugging Check (Active Host Link Detection)
               try {
-                final isAdb = await VolumeLockService.isUsbDebuggingEnabled();
+                final usbStatus = await VolumeLockService.getUsbDebuggingStatus();
+                final isAdb = usbStatus['isAdbEnabled'] ?? false;
+                final isUsbConnected = usbStatus['isUsbConnected'] ?? false;
+                final isAdbActiveWithHost = usbStatus['isAdbActiveWithHost'] ?? false;
+
                 isUsbDebuggingDetected = isAdb;
+                isUsbHostConnected = isUsbConnected;
+
                 if (kDebugMode) {
-                  // Mode developer (debug build): izinkan USB debugging agar proses development lancar
+                  // Mode developer (debug build): selalu di-bypass agar proses development lancar
                   isNoUsbDebugging = true;
                 } else {
-                  // Mode release (siswa): USB debugging dilarang keras demi integritas anti-cheat
-                  isNoUsbDebugging = !isAdb;
+                  // Mode release (siswa):
+                  // HANYA dilarang jika kabel USB SEDANG terhubung ke komputer/laptop!
+                  // Jika USB debugging ON di setelan tapi kabel TIDAK dicolok ke PC, TETAP LOLOS (Aman).
+                  isNoUsbDebugging = !isAdbActiveWithHost;
                 }
               } catch (_) {
                 isNoUsbDebugging = true;
@@ -600,18 +610,23 @@ class _ExamListScreenState extends State<ExamListScreen> {
                             icon: Icons.usb_off_rounded,
                             title: 'USB Debugging (Mode Pengembang)',
                             subtitle: currentStep == 3 && isChecking
-                                ? 'Memeriksa status ADB...'
+                                ? 'Memeriksa status sambungan USB...'
                                 : (currentStep < 3
                                     ? 'Menunggu antrean...'
-                                    : (isNoUsbDebugging
-                                        ? (kDebugMode && isUsbDebuggingDetected
-                                            ? 'AKTIF (Mode Debug Developer — Diizinkan)'
+                                    : (kDebugMode
+                                        ? (isUsbDebuggingDetected
+                                            ? 'Mode Debug Developer (Bypass Aktif)'
                                             : 'NONAKTIF (Sesuai Standar)')
-                                        : 'DILARANG! Matikan USB Debugging di Setelan HP')),
+                                        : (isNoUsbDebugging
+                                            ? (isUsbDebuggingDetected
+                                                ? 'Opsi Pengembang Aktif (Kabel Tidak Terhubung — Aman)'
+                                                : 'NONAKTIF (Sesuai Standar)')
+                                            : 'DILARANG! Terhubung ke PC. Cabut Kabel USB.'))),
                             isPassed: isNoUsbDebugging,
                             isLoading: isChecking && currentStep == 3,
                             isPending: isChecking && currentStep < 3,
                             isDark: isDark,
+                            onTap: !isNoUsbDebugging ? () => VolumeLockService.openDeveloperSettings() : null,
                           ),
                           Divider(color: listDivider, height: 1),
                           _buildDiagnosticRow(
@@ -914,6 +929,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
     bool isPending = false,
     bool isWarning = false,
     bool isDark = true,
+    VoidCallback? onTap,
   }) {
     final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subColor = isPending
@@ -931,7 +947,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 ? (isDark ? Colors.white70 : const Color(0xFF475569))
                 : AppTheme.dangerRed));
 
-    return Padding(
+    final content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
@@ -967,6 +983,16 @@ class _ExamListScreenState extends State<ExamListScreen> {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: content,
+      );
+    }
+
+    return content;
   }
 
   /**

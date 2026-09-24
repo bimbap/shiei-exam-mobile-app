@@ -538,6 +538,14 @@ class MainActivity : FlutterActivity() {
                     result.success(isUsbDebuggingEnabled())
                 }
 
+                "getUsbDebuggingStatus" -> {
+                    result.success(getUsbDebuggingStatus())
+                }
+
+                "openDeveloperSettings" -> {
+                    result.success(openDeveloperSettings())
+                }
+
                 "verifyAppSignature" -> {
                     Thread {
                         val res = getAppSignatureHash()
@@ -958,6 +966,56 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun isUsbConnectedToHost(): Boolean {
+        return try {
+            // Check 1: Sticky battery intent for USB plugged state (PC / Laptop port)
+            val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus = registerReceiver(null, batteryFilter)
+            val chargePlug = batteryStatus?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+            val isUsbPlugged = chargePlug == BatteryManager.BATTERY_PLUGGED_USB
+
+            // Check 2: Sticky USB_STATE intent for hardware host data link
+            val usbFilter = IntentFilter("android.hardware.usb.action.USB_STATE")
+            val usbStatus = registerReceiver(null, usbFilter)
+            val isUsbConnected = usbStatus?.getBooleanExtra("connected", false) ?: false
+            val isUsbConfigured = usbStatus?.getBooleanExtra("configured", false) ?: false
+
+            isUsbPlugged || (isUsbConnected && isUsbConfigured)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun getUsbDebuggingStatus(): Map<String, Any> {
+        val isAdb = isUsbDebuggingEnabled()
+        val isHostConnected = isUsbConnectedToHost()
+        val isAdbActiveWithHost = isAdb && isHostConnected
+
+        return mapOf(
+            "isAdbEnabled" to isAdb,
+            "isUsbConnected" to isHostConnected,
+            "isAdbActiveWithHost" to isAdbActiveWithHost
+        )
+    }
+
+    private fun openDeveloperSettings(): Boolean {
+        return try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+            true
+        } catch (_: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
     private fun getAppSignatureHash(): String {
         return try {
             val certBytes: ByteArray? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -1004,6 +1062,8 @@ class MainActivity : FlutterActivity() {
         val isRoot = isDeviceRooted()
         val isFrida = isFridaDetected()
         val isAdb = isUsbDebuggingEnabled()
+        val isUsbConnected = isUsbConnectedToHost()
+        val isAdbActiveWithHost = isAdb && isUsbConnected
         val sigHash = getAppSignatureHash()
 
         // In debug mode, allow developer signing. In release mode, signature must exist and not be empty.
@@ -1017,6 +1077,8 @@ class MainActivity : FlutterActivity() {
             "isRooted" to isRoot,
             "isFrida" to isFrida,
             "isUsbDebugging" to isAdb,
+            "isUsbConnected" to isUsbConnected,
+            "isAdbActiveWithHost" to isAdbActiveWithHost,
             "isSignatureValid" to isSignatureValid,
             "signatureHash" to sigHash,
             "isDebug" to isDebug

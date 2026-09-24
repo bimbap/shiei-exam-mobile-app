@@ -299,6 +299,43 @@ class VolumeLockService {
   }
 
   /**
+   * Get detailed USB debugging and host connection status.
+   * Returns:
+   * - isAdbEnabled: whether Developer Options USB debugging is on
+   * - isUsbConnected: whether phone is plugged into PC/laptop host via USB cable
+   * - isAdbActiveWithHost: true ONLY if ADB is enabled AND cable is connected to PC
+   */
+  static Future<Map<String, bool>> getUsbDebuggingStatus() async {
+    try {
+      final Map<dynamic, dynamic>? res = await _channel.invokeMethod('getUsbDebuggingStatus');
+      if (res != null) {
+        return {
+          'isAdbEnabled': res['isAdbEnabled'] == true,
+          'isUsbConnected': res['isUsbConnected'] == true,
+          'isAdbActiveWithHost': res['isAdbActiveWithHost'] == true,
+        };
+      }
+    } catch (_) {}
+    return {
+      'isAdbEnabled': false,
+      'isUsbConnected': false,
+      'isAdbActiveWithHost': false,
+    };
+  }
+
+  /**
+   * Open Android Developer Options settings page directly.
+   */
+  static Future<bool> openDeveloperSettings() async {
+    try {
+      final bool res = await _channel.invokeMethod('openDeveloperSettings') ?? false;
+      return res;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Get app signing certificate fingerprint hash.
    */
   static Future<String> getAppSignatureHash() async {
