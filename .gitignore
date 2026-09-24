@@ -1,0 +1,55 @@
+# Flutter & Dart Caches
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+/build/
+/coverage/
+
+# Android Specific
+android/.gradle/
+android/local.properties
+android/key.properties
+android/captures/
+android/app/debug/
+android/app/profile/
+android/app/release/
+*.jks
+*.keystore
+*.apk
+*.aab
+
+# iOS Specific
+ios/.generated/
+ios/Flutter/.last_build_id
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Pods/
+ios/Podfile.lock
+ios/.symlinks/
+*.ipa
+
+# Temporary Screenshots & Logs
+*.log
+*.png.bak
+screen*.png
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# IDE & OS
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+Thumbs.db
+desktop.ini

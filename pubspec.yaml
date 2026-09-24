@@ -1,0 +1,54 @@
+name: shiei_kiosk
+description: "Project SHIEI (市衛) — Secure Exam Browser Mobile Application for Schools"
+publish_to: 'none'
+version: 2.4.0+4
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Networking & HTTP
+  dio: ^5.7.0
+
+  # Secure Storage
+  flutter_secure_storage: ^9.2.2
+
+  # Device Info for Hardware Serial Number Binding
+  device_info_plus: ^11.1.1
+
+  # Secure WebView for Controlled Exam Display
+  flutter_inappwebview: ^6.1.5
+
+  # Audio Playback for Loud Siren Alarm
+  audioplayers: ^6.1.0
+
+  # Screen WakeLock
+  wakelock_plus: ^1.2.8
+
+  # Internationalization & Date Formatting
+  intl: ^0.20.3
+
+  # QR Code Generation & Camera Scanning
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.4.2
+
+  # Cupertino icons
+  cupertino_icons: ^1.0.8
+  file_selector: ^1.1.0
+  excel: ^4.0.6
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/audio/
+    - assets/images/

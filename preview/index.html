@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shiei Kiosk — Mobile App Interactive Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: radial-gradient(circle at top, #1e293b 0%, #090d16 100%);
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px;
+    }
+
+    /* Top Control Bar */
+    .top-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      padding: 8px 16px;
+      border-radius: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .screen-pill {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .screen-pill:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .screen-pill.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+
+    /* Phone Mockup Frame */
+    .phone-container {
+      position: relative;
+      width: 380px;
+      height: 780px;
+      background: #0f172a;
+      border-radius: 48px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 10px #1e293b, 0 0 0 12px #334155;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Phone Speaker / Camera Notch */
+    .phone-notch {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 110px;
+      height: 24px;
+      background: #000000;
+      border-radius: 20px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .camera-lens {
+      width: 10px;
+      height: 10px;
+      background: #111827;
+      border: 2px solid #1f2937;
+      border-radius: 50%;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 44px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 28px 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: #cbd5e1;
+      z-index: 40;
+    }
+
+    .status-bar-icons {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* Screen Wrapper */
+    .screen-viewport {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    .screen-viewport::-webkit-scrollbar {
+      width: 4px;
+    }
+    .screen-viewport::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+
+    /* Screen Views */
+    .screen {
+      display: none;
+      padding: 20px 22px;
+      min-height: 100%;
+      flex-direction: column;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    /* Shared UI Components */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .btn:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: #ef4444;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #475569;
+      color: #cbd5e1;
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .input-group {
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .input-label {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      display: block;
+      font-weight: 500;
+    }
+
+    .input-box {
+      width: 100%;
+      padding: 12px 14px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      color: white;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .input-box:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+
+    /* Card Component */
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+      text-align: left;
+    }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+      display: inline-block;
+    }
+    .badge-green { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+    .badge-yellow { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .badge-red { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .badge-blue { background: rgba(37, 99, 235, 0.2); color: #3b82f6; }
+
+    /* Bottom Home Indicator */
+    .home-indicator {
+      width: 130px;
+      height: 4px;
+      background: #475569;
+      border-radius: 4px;
+      margin: 10px auto 8px;
+    }
+
+    /* Screen 4: Red Lockout Specific */
+    #screen-lockout {
+      background: #180a0a;
+      text-align: center;
+      justify-content: center;
+    }
+
+    .alarm-siren-animation {
+      animation: pulse-red 1.2s infinite ease-in-out;
+    }
+
+    @keyframes pulse-red {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      50% { transform: scale(1.06); box-shadow: 0 0 25px 8px rgba(239, 68, 68, 0.6); }
+    }
+
+    .timer-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen Switcher Navigation Bar -->
+  <div class="top-controls">
+    <button class="screen-pill active" onclick="switchScreen('screen-login', this)">1. Login</button>
+    <button class="screen-pill" onclick="switchScreen('screen-exams', this)">2. Jadwal Ujian</button>
+    <button class="screen-pill" onclick="switchScreen('screen-player', this)">3. Exam Player</button>
+    <button class="screen-pill" onclick="switchScreen('screen-lockout', this)">4. Lockout (Sirine)</button>
+    <button class="screen-pill" onclick="switchScreen('screen-monitor', this)">5. Monitor Guru</button>
+    <button class="screen-pill" onclick="switchScreen('screen-settings', this)">6. Pengaturan</button>
+  </div>
+
+  <!-- Mobile Phone Frame Container -->
+  <div class="phone-container">
+    <div class="phone-notch">
+      <div class="camera-lens"></div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span id="current-time">08:00</span>
+      <div class="status-bar-icons">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 18.25c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l.64-.64C8.01 20.25 9.92 21 12 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7z"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4C7.31 4 3.07 5.9 0 8.98L12 21 24 8.98C20.93 5.9 16.69 4 12 4z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 4h-3V2h-4v2H7v18h10V4z"/></svg>
+      </div>
+    </div>
+
+    <!-- Viewport -->
+    <div class="screen-viewport">
+
+      <!-- SCREEN 1: LOGIN -->
+      <div id="screen-login" class="screen active">
+        <div style="display: flex; justify-content: flex-end; margin-top: 4px; margin-bottom: 8px;">
+          <button onclick="switchScreen('screen-settings', document.querySelectorAll('.screen-pill')[5])" title="Pengaturan & Info" style="background: transparent; border: none; color: #94a3b8; cursor: pointer; padding: 4px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
+        </div>
+
+        <div style="margin-top: 10px; margin-bottom: 24px; text-align: center;">
+          <div style="width: 68px; height: 68px; background: rgba(37,99,235,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; border: 2px solid rgba(37,99,235,0.3);">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="#3b82f6"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+          </div>
+          <h1 style="font-size: 24px; font-weight: 800; color: white; letter-spacing: 0.5px;">Shiei Kiosk</h1>
+        </div>
+
+        <!-- Role Toggle Tabs -->
+        <div style="display: flex; background: #1e293b; padding: 4px; border-radius: 10px; margin-bottom: 20px;">
+          <button id="tab-siswa" onclick="setRole('siswa')" style="flex: 1; padding: 8px; border: none; background: #2563eb; color: white; font-weight: 700; border-radius: 8px; cursor: pointer; font-size: 13px;">Siswa</button>
+          <button id="tab-guru" onclick="setRole('guru')" style="flex: 1; padding: 8px; border: none; background: transparent; color: #94a3b8; font-weight: 600; border-radius: 8px; cursor: pointer; font-size: 13px;">Guru / Pengawas</button>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label" id="label-name">Nama Lengkap Siswa</label>
+          <input type="text" class="input-box" id="login-name" value="Budi Santoso" placeholder="Masukkan nama...">
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Password</label>
+          <input type="password" class="input-box" value="siswa123" placeholder="••••••••">
+        </div>
+
+        <div class="input-group" id="group-token">
+          <label class="input-label">Token Akses Ujian (dari Pengawas)</label>
+          <input type="text" class="input-box" value="TOKEN-SMKN10-001" placeholder="Contoh: TOKEN-001">
+        </div>
+
+        <div style="background: rgba(30, 41, 59, 0.6); padding: 10px; border-radius: 8px; display: flex; gap: 8px; align-items: center; margin-bottom: 20px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#f59e0b"><path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm0 18H7V5h10v14zm-5-1c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z"/></svg>
+          <span style="font-size: 11px; color: #94a3b8; line-height: 1.3;">HP ini akan otomatis terikat (Serial Lock) pada akun ujian Anda.</span>
+        </div>
+
+        <button class="btn" onclick="goToExamList()">
+          <span id="btn-login-text">Masuk Ujian</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
+        </button>
+
+        <p style="font-size: 11px; color: #64748b; margin-top: 18px; text-align: center;">Server: http://192.168.1.100:8000/api/v1 (Online)</p>
+      </div>
+
+      <!-- SCREEN 2: JADWAL UJIAN -->
+      <div id="screen-exams" class="screen">
+        <!-- Student Header -->
+        <div class="card" style="display: flex; align-items: center; gap: 12px; margin-bottom: 18px;">
+          <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(37,99,235,0.2); display: flex; align-items: center; justify-content: center;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="#3b82f6"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </div>
+          <div>
+            <h3 style="font-size: 15px; font-weight: 700; color: white;">Budi Santoso</h3>
+            <p style="font-size: 12px; color: #94a3b8;">Kelas X RPL • SMKN 10 JAKARTA</p>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <h4 style="font-size: 14px; font-weight: 700; color: white;">Ujian Terjadwal</h4>
+          <span style="font-size: 11px; color: #3b82f6; cursor: pointer;">Refresh</span>
+        </div>
+
+        <!-- Exam 1: Aktif -->
+        <div class="card" style="border-color: rgba(37,99,235,0.4);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span class="badge badge-blue">Pemrograman Dasar</span>
+            <span class="badge badge-green">AKTIF</span>
+          </div>
+          <h3 style="font-size: 15px; font-weight: 700; color: white; margin-bottom: 6px;">UAS Pemrograman Dasar</h3>
+          <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">⏱ 60 Menit • Dimulai 08:00 WIB</p>
+          <button class="btn" onclick="openExamPlayer('UAS Pemrograman Dasar', 60)">
+            Mulai Mengerjakan
+          </button>
+        </div>
+
+        <!-- Exam 2: Upcoming (Locked) -->
+        <div class="card" style="opacity: 0.85;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span class="badge badge-blue">Fisika</span>
+            <span class="badge badge-yellow">MENUNGGU JADWAL</span>
+          </div>
+          <h3 style="font-size: 15px; font-weight: 700; color: white; margin-bottom: 6px;">Ujian Fisika Semester 1</h3>
+          <p style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;">⏱ 90 Menit • Mulai 10:30 WIB (Terkunci)</p>
+          <button class="btn" style="background: #334155; cursor: not-allowed;" onclick="alert('Ujian ini baru dibuka pukul 10:30 WIB!')">
+            Belum Waktunya (URL Terkunci)
+          </button>
+        </div>
+
+        <!-- Exam 3: Locked due to Violation -->
+        <div class="card" style="border-color: rgba(239, 68, 68, 0.6); background: rgba(24, 10, 10, 0.7);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span class="badge badge-blue">Matematika</span>
+            <span class="badge badge-red">TERKUNCI</span>
+          </div>
+          <h3 style="font-size: 15px; font-weight: 700; color: white; margin-bottom: 6px;">Kuis Aljabar Linear</h3>
+          <p style="font-size: 11px; color: #ef4444; margin-bottom: 12px;">⚠️ Sesi terkunci karena kecurangan. Silakan ke ruang pengawas.</p>
+          <button class="btn btn-danger" onclick="switchScreen('screen-lockout', document.querySelectorAll('.screen-pill')[3])">
+            Lihat Status Kunci
+          </button>
+        </div>
+      </div>
+
+      <!-- SCREEN 3: EXAM PLAYER (KIOSK) -->
+      <div id="screen-player" class="screen" style="padding: 0; background: #000;">
+        <!-- Kiosk Header Bar -->
+        <div style="background: #1e293b; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#3b82f6"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+            <span style="font-size: 13px; font-weight: 700; color: white;" id="player-exam-title">UAS Pemrograman Dasar</span>
+          </div>
+          <div class="timer-badge" id="player-timer">59:42</div>
+          <button style="background: #10b981; border: none; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="alert('Ujian berhasil diselesaikan!')">Selesai</button>
+        </div>
+
+        <!-- Simulated Webview -->
+        <div style="flex: 1; padding: 16px; overflow-y: auto; background: #0f172a; text-align: left;">
+          <div style="background: #1e293b; padding: 16px; border-radius: 12px; margin-bottom: 16px; border-left: 4px solid #2563eb;">
+            <h4 style="font-size: 14px; color: white; margin-bottom: 8px;">Soal 1 dari 40</h4>
+            <p style="font-size: 13px; color: #cbd5e1; line-height: 1.5; margin-bottom: 14px;">
+              Di bawah ini manakah tipe data primitif di bahasa C / Dart yang digunakan untuk menyimpan bilangan bulat tanpa koma?
+            </p>
+            <label style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; cursor: pointer; color: #94a3b8;">
+              <input type="radio" name="soal1" checked> A. int
+            </label>
+            <label style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; cursor: pointer; color: #94a3b8;">
+              <input type="radio" name="soal1"> B. double
+            </label>
+            <label style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px; font-size: 13px; cursor: pointer; color: #94a3b8;">
+              <input type="radio" name="soal1"> C. String
+            </label>
+            <label style="display: flex; gap: 10px; align-items: center; font-size: 13px; cursor: pointer; color: #94a3b8;">
+              <input type="radio" name="soal1"> D. bool
+            </label>
+          </div>
+
+          <!-- Trigger Anti-Cheat Simulation Box -->
+          <div style="background: rgba(239, 68, 68, 0.1); border: 1px dashed rgba(239, 68, 68, 0.5); padding: 14px; border-radius: 10px; text-align: center; margin-top: 20px;">
+            <p style="font-size: 12px; color: #f87171; font-weight: 600; margin-bottom: 8px;">🔥 Simulasi Anti-Cheat Demo</p>
+            <p style="font-size: 11px; color: #94a3b8; margin-bottom: 12px;">Klik tombol di bawah ini untuk simulasi siswa meminimalkan aplikasi / coba split screen:</p>
+            <button class="btn btn-danger" style="padding: 10px;" onclick="triggerViolationSimulation()">
+              ⚠️ Tes Pelanggaran (Split Screen / Keluar)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCREEN 4: RED LOCKOUT (AUDIBLE SIREN & LOCK) -->
+      <div id="screen-lockout" class="screen">
+        <div style="margin-top: 40px; margin-bottom: 20px;">
+          <div class="alarm-siren-animation" style="width: 86px; height: 86px; background: rgba(239, 68, 68, 0.2); border: 3px solid #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="#ef4444"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          </div>
+          <h2 style="font-size: 22px; font-weight: 800; color: #ef4444; letter-spacing: 1px;">UJIAN TERKUNCI!</h2>
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 6px; line-height: 1.4;">
+            Terdeteksi membuka aplikasi lain / split screen. Sesi ujian otomatis dihentikan dan progres di-reset.
+          </p>
+        </div>
+
+        <!-- Violation Details -->
+        <div class="card" style="border-color: #991b1b; background: #1e1010; margin-bottom: 16px;">
+          <div style="font-size: 11px; color: #f59e0b; font-weight: 700; margin-bottom: 4px;">JENIS PELANGGARAN:</div>
+          <div style="font-size: 13px; color: white; font-weight: 600;">Split Screen / App Minimize Detected</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">Volume HP otomatis dikunci 100% (Sirine Menyala).</div>
+        </div>
+
+        <div style="background: rgba(37,99,235,0.1); border: 1px solid rgba(37,99,235,0.3); border-radius: 10px; padding: 12px; margin-bottom: 20px; font-size: 12px; color: #cbd5e1;">
+          🚶‍♂️ <strong>Silakan bawa HP ini ke Ruang Admin / Pengawas Ujian</strong> untuk meminta pembukaan kunci ujian.
+        </div>
+
+        <button class="btn" style="background: #2563eb; margin-bottom: 10px;" onclick="checkUnlockFromAdmin()">
+          🔄 Cek Status Buka Kunci dari Pengawas
+        </button>
+
+        <button class="btn btn-outline" style="margin-bottom: 10px;" onclick="stopSirenAudio()">
+          🔇 Matikan Bunyi Sirine
+        </button>
+      </div>
+
+      <!-- SCREEN 5: MONITOR PENGAWAS (TEACHER) -->
+      <div id="screen-monitor" class="screen">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+          <div>
+            <h3 style="font-size: 16px; font-weight: 800; color: white;">Monitor Pengawas</h3>
+            <p style="font-size: 12px; color: #94a3b8;">Pengawas: Bu Yuning R.</p>
+          </div>
+          <span class="badge badge-green" style="padding: 5px 10px;">Reverb Online</span>
+        </div>
+
+        <!-- Live student list -->
+        <div class="card" style="border-left: 4px solid #ef4444;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: white;">Budi Santoso</h4>
+            <span class="badge badge-red">TERKUNCI (SPLIT SCREEN)</span>
+          </div>
+          <p style="font-size: 12px; color: #94a3b8; margin-bottom: 10px;">UAS Pemrograman Dasar • X RPL</p>
+          <button class="btn" style="background: #2563eb; padding: 8px; font-size: 12px;" onclick="unlockStudentDemo('Budi Santoso')">
+            🔓 Buka Kunci Ujian Siswa Ini
+          </button>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #10b981;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: white;">Siti Rahma</h4>
+            <span class="badge badge-green">SEDANG UJIAN (00:38:12)</span>
+          </div>
+          <p style="font-size: 12px; color: #94a3b8;">UAS Pemrograman Dasar • X RPL</p>
+          <span style="font-size: 11px; color: #64748b;">Device: Samsung A54 (Terkunci)</span>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #10b981;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+            <h4 style="font-size: 14px; font-weight: 700; color: white;">Ahmad Fauzi</h4>
+            <span class="badge badge-green">SEDANG UJIAN (00:41:05)</span>
+          </div>
+          <p style="font-size: 12px; color: #94a3b8;">UAS Pemrograman Dasar • X RPL</p>
+          <span style="font-size: 11px; color: #64748b;">Device: Xiaomi Redmi Note 12</span>
+        </div>
+      </div>
+
+      <!-- SCREEN 6: PENGATURAN & ABOUT -->
+      <div id="screen-settings" class="screen" style="overflow-y: auto;">
+        <!-- Top bar -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <button onclick="switchScreen('screen-login', document.querySelectorAll('.screen-pill')[0])" style="background: rgba(30,41,59,0.8); border: 1px solid #334155; color: white; border-radius: 8px; padding: 6px 12px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+            ← Kembali
+          </button>
+          <h3 style="font-size: 15px; font-weight: 700; color: white;">Pengaturan & Info</h3>
+          <div style="width: 60px;"></div>
+        </div>
+
+        <!-- Section 1: Server Connection -->
+        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px;">KONEKSI SERVER UJIAN</div>
+        <div class="card" style="margin-bottom: 14px;">
+          <label style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 6px;">Alamat IP / Domain Backend Sekolah:</label>
+          <input type="text" id="setting-server-url" class="input-box" value="http://192.168.1.100:8000/api/v1" style="font-size: 12px; padding: 8px 10px; margin-bottom: 10px;">
+          <button class="btn" style="padding: 8px; font-size: 12px;" onclick="alert('URL Server berhasil disimpan!')">
+            Simpan Server URL
+          </button>
+        </div>
+
+        <!-- Section 2: Hardware & Device Lock -->
+        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px;">PERANGKAT & HARDWARE LOCK</div>
+        <div class="card" style="margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px;">
+            <span style="color: #94a3b8;">Hardware Serial:</span>
+            <span style="color: white; font-family: 'JetBrains Mono', monospace; font-size: 11px;">DEV-SMKN10-SN-89724-XYZ</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px;">
+            <span style="color: #94a3b8;">Status Ikatan:</span>
+            <span style="color: #10b981; font-weight: 600;">Terkunci pada Akun Ini</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px;">
+            <span style="color: #94a3b8;">Mode Kiosk OS:</span>
+            <span style="color: #3b82f6; font-weight: 600;">FLAG_SECURE Aktif</span>
+          </div>
+        </div>
+
+        <!-- Section 3: Dukungan Sekolah (12 Jam & AI) -->
+        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px;">DUKUNGAN SEKOLAH (12 JAM)</div>
+        <div class="card" style="margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px;">
+            <span style="color: #94a3b8;">Jam Operasional:</span>
+            <span style="color: white; font-weight: 600;">07:00 - 19:00 (12 Jam)</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px;">
+            <span style="color: #94a3b8;">Email Bantuan:</span>
+            <span style="color: white;">helpdesk@smkn10.sch.id</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 12px;">
+            <span style="color: #94a3b8;">Dukungan AI:</span>
+            <span style="color: #10b981; font-weight: 600;">Aktif (AI Assistant Ready)</span>
+          </div>
+        </div>
+
+        <!-- Section 4: Diagnostik Suara & Sirine -->
+        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px;">DIAGNOSTIK SUARA & SIRINE</div>
+        <div class="card" style="margin-bottom: 14px;">
+          <p style="font-size: 11px; color: #94a3b8; margin-bottom: 10px;">Uji coba fungsi sirine alarm pelanggaran dan penguncian volume hardware 100%:</p>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-test-siren" class="btn btn-danger" style="flex: 1; padding: 8px; font-size: 12px;" onclick="toggleTestSirenDiagnostic()">
+              🚨 Tes Suara Sirine
+            </button>
+            <button class="btn" style="background: #334155; padding: 8px 12px; font-size: 12px;" onclick="alert('Hardware Volume Lock: Dipaksa 100%!')">
+              Set 100%
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 5: Tentang Aplikasi & Info Pengembang -->
+        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 6px;">TENTANG APLIKASI</div>
+        <div class="card" style="margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(37,99,235,0.2); display: flex; align-items: center; justify-content: center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 800; color: white;">Shiei Kiosk</h4>
+              <span style="font-size: 11px; color: #94a3b8;">Versi 1.0.0 (Build 2026.1)</span>
+            </div>
+          </div>
+          <p style="font-size: 11px; color: #94a3b8; line-height: 1.4; margin-bottom: 12px;">Platform ujian browser terproteksi multi-sekolah dengan kiosk lockdown, deteksi split-screen, dan binding serial number hardware.</p>
+          <div style="border-top: 1px solid #334155; padding-top: 10px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
+              <span style="color: #94a3b8;">Pengembang:</span>
+              <span style="color: white; font-weight: 700;">bapp Production</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px;">
+              <span style="color: #94a3b8;">Role:</span>
+              <span style="color: #cbd5e1;">Junior Cloud Engineer & Web Dev</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 12px;">
+              <span style="color: #94a3b8;">Website:</span>
+              <a href="https://ibrahimt.my.id" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600;">ibrahimt.my.id</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Phone Home Indicator -->
+    <div class="home-indicator"></div>
+  </div>
+
+  <script>
+    // Clock
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      document.getElementById('current-time').textContent = `${h}:${m}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Screen Switching
+    function switchScreen(screenId, btnElement) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById(screenId).classList.add('active');
+
+      if (btnElement) {
+        document.querySelectorAll('.screen-pill').forEach(b => b.classList.remove('active'));
+        btnElement.classList.add('active');
+      }
+
+      if (screenId !== 'screen-lockout') {
+        stopSirenAudio();
+      }
+    }
+
+    // Role Switching
+    function setRole(role) {
+      const tabSiswa = document.getElementById('tab-siswa');
+      const tabGuru = document.getElementById('tab-guru');
+      const groupToken = document.getElementById('group-token');
+      const labelName = document.getElementById('label-name');
+      const btnText = document.getElementById('btn-login-text');
+
+      if (role === 'siswa') {
+        tabSiswa.style.background = '#2563eb';
+        tabSiswa.style.color = '#fff';
+        tabGuru.style.background = 'transparent';
+        tabGuru.style.color = '#94a3b8';
+        groupToken.style.display = 'block';
+        labelName.textContent = 'Nama Lengkap Siswa';
+        btnText.textContent = 'Masuk Ujian';
+      } else {
+        tabGuru.style.background = '#2563eb';
+        tabGuru.style.color = '#fff';
+        tabSiswa.style.background = 'transparent';
+        tabSiswa.style.color = '#94a3b8';
+        groupToken.style.display = 'none';
+        labelName.textContent = 'Username Guru / Pengawas';
+        btnText.textContent = 'Masuk Pengawas';
+      }
+    }
+
+    function goToExamList() {
+      const tabGuruActive = document.getElementById('tab-guru').style.background === 'rgb(37, 99, 235)';
+      if (tabGuruActive) {
+        switchScreen('screen-monitor', document.querySelectorAll('.screen-pill')[4]);
+      } else {
+        switchScreen('screen-exams', document.querySelectorAll('.screen-pill')[1]);
+      }
+    }
+
+    function openExamPlayer(title, duration) {
+      document.getElementById('player-exam-title').textContent = title;
+      switchScreen('screen-player', document.querySelectorAll('.screen-pill')[2]);
+    }
+
+    // Web Audio API Siren Generator
+    let audioCtx = null;
+    let sirenOsc = null;
+    let sirenGain = null;
+    let sirenInterval = null;
+
+    function startSirenAudio() {
+      if (sirenOsc) return;
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        sirenOsc = audioCtx.createOscillator();
+        sirenGain = audioCtx.createGain();
+
+        sirenOsc.type = 'sawtooth';
+        sirenGain.gain.setValueAtTime(0.15, audioCtx.currentTime); // controlled web volume
+
+        sirenOsc.connect(sirenGain);
+        sirenGain.connect(audioCtx.destination);
+        sirenOsc.start();
+
+        let isHigh = false;
+        sirenInterval = setInterval(() => {
+          if (!sirenOsc) return;
+          sirenOsc.frequency.setValueAtTime(isHigh ? 880 : 660, audioCtx.currentTime);
+          isHigh = !isHigh;
+        }, 300);
+      } catch (e) {}
+    }
+
+    function stopSirenAudio() {
+      if (sirenInterval) clearInterval(sirenInterval);
+      if (sirenOsc) {
+        try { sirenOsc.stop(); sirenOsc.disconnect(); } catch (e) {}
+        sirenOsc = null;
+      }
+      if (audioCtx) {
+        try { audioCtx.close(); } catch (e) {}
+        audioCtx = null;
+      }
+      isTestingSiren = false;
+      const btn = document.getElementById('btn-test-siren');
+      if (btn) {
+        btn.textContent = '🚨 Tes Suara Sirine';
+        btn.style.background = '#ef4444';
+      }
+    }
+
+    let isTestingSiren = false;
+    function toggleTestSirenDiagnostic() {
+      const btn = document.getElementById('btn-test-siren');
+      if (isTestingSiren) {
+        stopSirenAudio();
+      } else {
+        startSirenAudio();
+        isTestingSiren = true;
+        if (btn) {
+          btn.textContent = '⏹ Hentikan Sirine';
+          btn.style.background = '#991b1b';
+        }
+      }
+    }
+
+    function triggerViolationSimulation() {
+      startSirenAudio();
+      switchScreen('screen-lockout', document.querySelectorAll('.screen-pill')[3]);
+    }
+
+    let isStudentUnlockedByAdmin = false;
+
+    function unlockStudentDemo(name) {
+      isStudentUnlockedByAdmin = true;
+      alert(`Berhasil! Kunci ujian untuk "${name}" telah dibuka oleh pengawas.\nSiswa sekarang dapat menekan tombol "Cek Status Buka Kunci" di HP mereka.`);
+    }
+
+    function checkUnlockFromAdmin() {
+      if (isStudentUnlockedByAdmin) {
+        stopSirenAudio();
+        alert('🎉 KUNCI TELAH DIBUKA OLEH PENGAWAS!\nStatus lock diangkat. Anda dapat mulai mengerjakan kembali ujian dari awal.');
+        isStudentUnlockedByAdmin = false;
+        switchScreen('screen-exams', document.querySelectorAll('.screen-pill')[1]);
+      } else {
+        alert('⚠️ Ujian masih berstatus TERKUNCI.\nPengawas belum membuka kunci ujian Anda. Silakan temui pengawas di ruang admin.');
+      }
+    }
+  </script>
+</body>
+</html>
