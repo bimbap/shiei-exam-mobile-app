@@ -27,10 +27,17 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "Shiei Exam"
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appName"] = "Shiei Exam (Debug)"
+        }
         release {
+            manifestPlaceholders["appName"] = "Shiei Exam"
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -49,6 +56,17 @@ android {
                 doLast {
                     val apkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
                     val src = File(apkDir, "app-release.apk")
+                    val dst = File(apkDir, "ShieiExam-Android-v${variant.versionName}.apk")
+                    if (src.exists()) {
+                        src.copyTo(dst, overwrite = true)
+                    }
+                }
+            }
+        } else if (variant.buildType.name == "debug") {
+            variant.assembleProvider.configure {
+                doLast {
+                    val apkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+                    val src = File(apkDir, "app-debug.apk")
                     val dst = File(apkDir, "ShieiExam-Android-v${variant.versionName}.apk")
                     if (src.exists()) {
                         src.copyTo(dst, overwrite = true)

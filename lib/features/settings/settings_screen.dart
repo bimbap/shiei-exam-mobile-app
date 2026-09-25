@@ -28,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _deviceName = 'Memuat...';
   String _deviceModel = 'Memuat...';
   bool _isScreenshotProtectionEnabled = true;
+  bool _isAppExitBypassEnabled = false;
 
   // Admin License State
   bool _isAdmin = false;
@@ -46,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final name = await VolumeLockService.getDeviceName();
     final model = await VolumeLockService.getDeviceId();
     final isSec = await TokenStorage.isScreenshotProtectionEnabled();
+    final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
 
     // Determine admin role status and school context
     final role = await TokenStorage.getRole();
@@ -68,6 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _deviceName = name;
         _deviceModel = model;
         _isScreenshotProtectionEnabled = isSec;
+        _isAppExitBypassEnabled = isExitBypass;
         _isAdmin = isAdmin;
         _schoolData = school;
       });
@@ -148,8 +151,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         AppNotification.show(
           context,
           title: 'Proteksi Layar Ujian DINONAKTIFKAN',
-          subtitle: 'Tangkapan layar diizinkan saat ujian.',
+          subtitle: 'Tangkapan layar diizinkan saat ujian (Bypass aktif tanpa penalti).',
           type: NotificationType.warning,
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleAppExitBypass(bool val) async {
+    setState(() {
+      _isAppExitBypassEnabled = val;
+    });
+    await TokenStorage.setAppExitBypass(val);
+
+    if (mounted) {
+      if (val) {
+        AppNotification.show(
+          context,
+          title: 'Bypass Keluar Aplikasi DIAKTIFKAN',
+          subtitle: 'Keluar/minimize app diizinkan tanpa memicu lockout ujian.',
+          type: NotificationType.warning,
+        );
+      } else {
+        AppNotification.show(
+          context,
+          title: 'Bypass Keluar Aplikasi DINONAKTIFKAN',
+          subtitle: 'Proteksi fullscreen & lockout ujian kembali normal.',
+          type: NotificationType.info,
         );
       }
     }
@@ -300,6 +328,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  Divider(color: dividerColor, height: 18),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Bypass Keluar Aplikasi (Testing)',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: titleColor),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF97316).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: const Color(0xFFF97316).withValues(alpha: 0.4),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'DEBUG ONLY',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFFEA580C),
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _isAppExitBypassEnabled
+                                  ? 'Bypass aktif: Bebas minimize/keluar app tanpa memicu lockout'
+                                  : 'Standar: Proteksi fullscreen & deteksi keluar app aktif',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _isAppExitBypassEnabled ? const Color(0xFFFBBF24) : AppTheme.primaryGlow,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isAppExitBypassEnabled,
+                        activeThumbColor: const Color(0xFFFBBF24),
+                        activeTrackColor: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                        inactiveThumbColor: isDark ? Colors.white70 : const Color(0xFF94A3B8),
+                        inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        onChanged: _toggleAppExitBypass,
+                      ),
+                    ],
+                  ),
                 ],
               ],
             ),
@@ -407,9 +495,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Versi ${AppUpdateService.currentAppVersion} (Build ${AppUpdateService.currentBuildNumber})',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: titleColor),
+                        Row(
+                          children: [
+                            Text(
+                              'Versi ${AppUpdateService.displayAppVersion} (Build ${AppUpdateService.displayBuildNumber})',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: titleColor),
+                            ),
+                            if (AppUpdateService.isDebugBuild) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                                ),
+                                child: const Text(
+                                  'DEBUG',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFF59E0B),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         const Text(
                           'Menjaga Integritas, Mengawal Kejujuran Ujian',
@@ -425,7 +537,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(fontSize: 12, color: textColor, height: 1.4),
                 ),
                 Divider(color: dividerColor, height: 22),
-                _buildInfoRow('Versi Rilis Kiosk:', 'v${AppUpdateService.currentAppVersion} (${AppUpdateService.currentBuildNumber})', valueColor: AppTheme.primaryGlow, isDark: isDark),
+                _buildInfoRow('Versi Rilis Kiosk:', AppUpdateService.fullVersionString, valueColor: AppTheme.primaryGlow, isDark: isDark),
                 const SizedBox(height: 8),
                 _buildInfoRow('Pengembang:', 'bapp Production', isDark: isDark),
               ],

@@ -135,6 +135,29 @@ class VolumeLockService {
   }
 
   /**
+   * Comprehensive detection for floating windows, Picture-in-Picture (PiP),
+   * background media playback, and obscured touch overlays.
+   */
+  static Future<Map<String, dynamic>> detectFloatingWindowOrOverlay() async {
+    try {
+      final res = await _channel.invokeMethod('detectFloatingWindowOrOverlay');
+      if (res is Map) {
+        return Map<String, dynamic>.from(res);
+      }
+    } catch (_) {}
+    return {'has_overlay': false, 'reason': ''};
+  }
+
+  /**
+   * Reset touch obscurity tracking before running fresh diagnostic scan.
+   */
+  static Future<void> resetOverlayTouchDetection() async {
+    try {
+      await _channel.invokeMethod('resetOverlayTouchDetection');
+    } catch (_) {}
+  }
+
+  /**
    * Check whether an incoming or active phone call is currently in progress.
    * Exam Policy: Phone calls are permitted and will NOT eject student from exam.
    */
@@ -234,6 +257,35 @@ class VolumeLockService {
   }
 
   /**
+   * Get Android OS version info: sdk_int (API level) and release string (e.g. "14").
+   */
+  static Future<Map<String, dynamic>> getAndroidVersion() async {
+    try {
+      final Map<dynamic, dynamic>? res = await _channel.invokeMethod('getAndroidVersion');
+      if (res != null) {
+        return {
+          'sdk_int': res['sdk_int'] as int? ?? 0,
+          'release': res['release']?.toString() ?? '',
+        };
+      }
+    } catch (_) {}
+    return {'sdk_int': 0, 'release': ''};
+  }
+
+  /**
+   * Check whether a recent hardware screenshot key combo (e.g. Volume Down + Power)
+   * occurred right before focus loss.
+   */
+  static Future<bool> wasRecentScreenshotKey() async {
+    try {
+      final bool? res = await _channel.invokeMethod('wasRecentScreenshotKey');
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Block or unblock native Android system status bar and gesture navigation bar.
    * When blocked, pull-downs and swipe-up gesture bars are immediately suppressed/collapsed.
    */
@@ -329,6 +381,30 @@ class VolumeLockService {
   static Future<bool> openDeveloperSettings() async {
     try {
       final bool res = await _channel.invokeMethod('openDeveloperSettings') ?? false;
+      return res;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Open Android Bluetooth settings page directly.
+   */
+  static Future<bool> openBluetoothSettings() async {
+    try {
+      final bool res = await _channel.invokeMethod('openBluetoothSettings') ?? false;
+      return res;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Open Android Display over other apps (Overlay) settings page directly.
+   */
+  static Future<bool> openOverlaySettings() async {
+    try {
+      final bool res = await _channel.invokeMethod('openOverlaySettings') ?? false;
       return res;
     } catch (_) {
       return false;

@@ -112,6 +112,20 @@ class AppUpdateService {
   static const int currentAppBuild = 4;
   static const String currentBuildNumber = '2026.4';
 
+  /// True if running in debug mode (development / debug build)
+  static bool get isDebugBuild => kDebugMode;
+
+  /// Dynamic display version string differentiating debug builds from production releases.
+  /// E.g. '2.4.0-debug' vs '2.4.0'
+  static String get displayAppVersion => kDebugMode ? '$currentAppVersion-debug' : currentAppVersion;
+
+  /// Dynamic build number string.
+  /// E.g. '2026.4-dev' vs '2026.4'
+  static String get displayBuildNumber => kDebugMode ? '$currentBuildNumber-dev' : currentBuildNumber;
+
+  /// Formatted full version label for settings, changelogs, and headers.
+  static String get fullVersionString => 'v$displayAppVersion (Build $displayBuildNumber)';
+
   // Local fallback changelogs to ensure offline availability
   static final List<VersionChangelog> fallbackChangelogs = [
     VersionChangelog(

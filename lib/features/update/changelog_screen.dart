@@ -55,7 +55,7 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
       AppNotification.show(
         context,
         title: 'Aplikasi Mutakhir',
-        subtitle: 'Aplikasi Anda sudah memakai rilis terbaru (v${AppUpdateService.currentAppVersion}).',
+        subtitle: 'Aplikasi Anda sudah memakai rilis terbaru (v${AppUpdateService.displayAppVersion}).',
         type: NotificationType.success,
       );
     } else {
@@ -142,7 +142,7 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'v${AppUpdateService.currentAppVersion} (Build ${AppUpdateService.currentBuildNumber})',
+                              'v${AppUpdateService.displayAppVersion} (Build ${AppUpdateService.displayBuildNumber})',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -156,16 +156,22 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isDark ? AppTheme.accentGreen.withOpacity(0.18) : const Color(0xFFECFDF5),
+                          color: AppUpdateService.isDebugBuild
+                              ? const Color(0xFFF59E0B).withValues(alpha: 0.18)
+                              : (isDark ? AppTheme.accentGreen.withOpacity(0.18) : const Color(0xFFECFDF5)),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isDark ? AppTheme.accentGreen.withOpacity(0.4) : const Color(0xFFA7F3D0),
+                            color: AppUpdateService.isDebugBuild
+                                ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
+                                : (isDark ? AppTheme.accentGreen.withOpacity(0.4) : const Color(0xFFA7F3D0)),
                           ),
                         ),
                         child: Text(
-                          'AKTIF',
+                          AppUpdateService.isDebugBuild ? 'DEBUG' : 'AKTIF',
                           style: TextStyle(
-                            color: isDark ? AppTheme.accentGreen : const Color(0xFF059669),
+                            color: AppUpdateService.isDebugBuild
+                                ? const Color(0xFFF59E0B)
+                                : (isDark ? AppTheme.accentGreen : const Color(0xFF059669)),
                             fontSize: 10.5,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,

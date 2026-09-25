@@ -263,6 +263,7 @@ class StudentActionSheet {
                             violationReason: lockReason,
                             examTitle: effectiveExamTitle,
                             nisn: nisn,
+                            timestamp: record['locked_at']?.toString() ?? record['lock_time']?.toString() ?? record['updated_at']?.toString(),
                           );
                           if (confirmed && context.mounted) {
                             final ok = await controller.unlockStudent(linkId, userId);

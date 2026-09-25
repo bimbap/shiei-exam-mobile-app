@@ -180,6 +180,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
     bool isBatteryOk = true;
     bool isVolumeReady = false;
     bool isOverlayReady = false;
+    String? overlayReason;
     bool isServerOk = false;
     int latencyMs = 0;
     bool isChecking = true;
@@ -195,7 +196,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            Future<void> runInspection() async {
+            Future<void> runInspection({bool resetTouch = false}) async {
               if (isInspecting) return;
               isInspecting = true;
 
@@ -214,8 +215,14 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 isBatteryOk = true;
                 isVolumeReady = false;
                 isOverlayReady = false;
+                overlayReason = null;
                 isServerOk = false;
               });
+
+              // Only reset touch tracking if explicitly requested by manual rescan
+              if (resetTouch) {
+                await VolumeLockService.resetOverlayTouchDetection();
+              }
 
               // Brief yield for smooth bottom-sheet entrance
               await Future.delayed(const Duration(milliseconds: 40));
@@ -238,6 +245,18 @@ class _ExamListScreenState extends State<ExamListScreen> {
               try {
                 final isCallActive = await VolumeLockService.isPhoneCallActive();
                 isNoCallActive = !isCallActive;
+                final examId = exam['id'];
+                if (examId != null) {
+                  try {
+                    await _api.post(
+                      ApiEndpoints.phoneCallStatus,
+                      data: {
+                        'link_id': examId,
+                        'is_on_call': isCallActive,
+                      },
+                    );
+                  } catch (_) {}
+                }
               } catch (_) {
                 isNoCallActive = true;
               }
@@ -370,12 +389,21 @@ class _ExamListScreenState extends State<ExamListScreen> {
               setModalState(() => currentStep = 8);
               await Future.delayed(const Duration(milliseconds: 50));
 
-              // Step 8: Overlay protection
+              // Step 8: Overlay, PiP & Floating Window protection
               try {
                 await VolumeLockService.setOverlayProtection(true);
-                isOverlayReady = true;
+                final overlayResult = await VolumeLockService.detectFloatingWindowOrOverlay();
+                final bool hasOverlay = overlayResult['has_overlay'] == true;
+                if (hasOverlay) {
+                  isOverlayReady = false;
+                  overlayReason = overlayResult['reason']?.toString() ?? 'Tutup jendela mengambang / PiP sebelum ujian';
+                } else {
+                  isOverlayReady = true;
+                  overlayReason = null;
+                }
               } catch (_) {
                 isOverlayReady = true;
+                overlayReason = null;
               }
               if (!modalCtx.mounted) {
                 isInspecting = false;
@@ -433,7 +461,22 @@ class _ExamListScreenState extends State<ExamListScreen> {
             final listBorder = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
             final listDivider = isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0);
 
-            return Container(
+            return Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) async {
+                if (!isChecking) {
+                  final check = await VolumeLockService.detectFloatingWindowOrOverlay();
+                  if (check['has_overlay'] == true && isOverlayReady) {
+                    if (modalCtx.mounted) {
+                      setModalState(() {
+                        isOverlayReady = false;
+                        overlayReason = check['reason']?.toString() ?? 'Jendela mengambang terdeteksi di atas layar';
+                      });
+                    }
+                  }
+                }
+              },
+              child: Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               decoration: BoxDecoration(
                 color: sheetBg,
@@ -567,23 +610,24 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                 ? 'Memeriksa hardware...'
                                 : (currentStep < 0
                                     ? 'Menunggu antrean...'
-                                    : (isBtOff ? 'MATI (Sesuai Standar)' : 'AKTIF! Harap matikan Bluetooth')),
+                                    : (isBtOff ? 'MATI (Sesuai Standar)' : 'DILARANG! Harap matikan Bluetooth')),
                             isPassed: isBtOff,
                             isLoading: isChecking && currentStep == 0,
                             isPending: isChecking && currentStep < 0,
                             isDark: isDark,
+                            onTap: !isBtOff ? () => VolumeLockService.openBluetoothSettings() : null,
                           ),
                           Divider(color: listDivider, height: 1),
                           _buildDiagnosticRow(
                             icon: Icons.phone_disabled_rounded,
-                            title: 'Panggilan Telepon',
+                            title: 'Panggilan Telepon & Suara (VoIP)',
                             subtitle: currentStep == 1 && isChecking
-                                ? 'Memeriksa jalur telepon...'
+                                ? 'Memeriksa panggilan seluler & VoIP (WhatsApp/Discord)...'
                                 : (currentStep < 1
                                     ? 'Menunggu antrean...'
                                     : (isNoCallActive
                                         ? 'TIDAK ADA PANGGILAN (Aman)'
-                                        : 'DILARANG! Tutup telepon sebelum masuk ujian')),
+                                        : 'DILARANG! Tutup panggilan seluler / WhatsApp sebelum ujian')),
                             isPassed: isNoCallActive,
                             isLoading: isChecking && currentStep == 1,
                             isPending: isChecking && currentStep < 1,
@@ -654,7 +698,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                     ? 'Menunggu antrean...'
                                     : (isBrightnessOk
                                         ? '$brightnessPercent% (Sesuai Standar ≥ 40%)'
-                                        : '$brightnessPercent% (Terlalu Redup! Harap naikkan)')),
+                                        : '$brightnessPercent% (Terlalu Redup! Harap naikkan ≥ 40%)')),
                             isPassed: isBrightnessOk,
                             isLoading: isChecking && currentStep == 5,
                             isPending: isChecking && currentStep < 5,
@@ -693,7 +737,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                 ? 'Menyiapkan volume...'
                                 : (currentStep < 7
                                     ? 'Menunggu antrean...'
-                                    : (isVolumeReady ? 'Volume 100% Siaga' : 'Volume Belum Siap')),
+                                    : (isVolumeReady ? 'Volume 100% Siaga (Sirene Siap)' : 'DILARANG! Volume Belum Maksimal / Izin Dibutuhkan')),
                             isPassed: isVolumeReady,
                             isLoading: isChecking && currentStep == 7,
                             isPending: isChecking && currentStep < 7,
@@ -701,27 +745,30 @@ class _ExamListScreenState extends State<ExamListScreen> {
                           ),
                           Divider(color: listDivider, height: 1),
                           _buildDiagnosticRow(
-                            icon: Icons.lock_person_rounded,
-                            title: 'Pinning Kiosk & Anti-Overlay',
+                            icon: Icons.picture_in_picture_alt_rounded,
+                            title: 'Anti-Overlay & Jendela Mengambang',
                             subtitle: currentStep == 8 && isChecking
-                                ? 'Menyiapkan proteksi...'
+                                ? 'Memindai jendela mengambang & PiP...'
                                 : (currentStep < 8
                                     ? 'Menunggu antrean...'
-                                    : (isOverlayReady ? 'Mode Kiosk Terproteksi' : 'Proteksi Belum Siap')),
+                                    : (isOverlayReady
+                                        ? 'Mode Kiosk Bersih (Bebas Overlay / PiP)'
+                                        : 'DILARANG! ${overlayReason ?? "Jendela Mengambang / PiP Terdeteksi!"}')),
                             isPassed: isOverlayReady,
                             isLoading: isChecking && currentStep == 8,
                             isPending: isChecking && currentStep < 8,
                             isDark: isDark,
+                            onTap: !isOverlayReady ? () => VolumeLockService.openOverlaySettings() : null,
                           ),
                           Divider(color: listDivider, height: 1),
                           _buildDiagnosticRow(
                             icon: Icons.wifi_rounded,
-                            title: 'Koneksi Server Sekolah',
+                            title: 'Koneksi Server',
                             subtitle: currentStep == 9 && isChecking
                                 ? 'Menguji latensi...'
                                 : (currentStep < 9
                                     ? 'Menunggu antrean...'
-                                    : (isServerOk ? '${latencyMs}ms (Koneksi Stabil)' : 'Koneksi Terganggu')),
+                                    : (isServerOk ? '${latencyMs}ms (Koneksi Stabil)' : 'DILARANG! Koneksi Terganggu (Gagal Menghubungi Server)')),
                             isPassed: isServerOk,
                             isLoading: isChecking && currentStep == 9,
                             isPending: isChecking && currentStep < 9,
@@ -743,7 +790,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: isChecking ? null : runInspection,
+                          onPressed: isChecking ? null : () => runInspection(resetTouch: true),
                           icon: const Icon(Icons.refresh_rounded, size: 16),
                           label: const Text('Pindai Ulang', style: TextStyle(fontSize: 12)),
                         ),
@@ -759,6 +806,67 @@ class _ExamListScreenState extends State<ExamListScreen> {
                             ),
                             onPressed: (allPassed && !isChecking)
                                 ? () async {
+                                    // 1. Final security re-verification of overlays and floating windows
+                                    final overlayCheck = await VolumeLockService.detectFloatingWindowOrOverlay();
+                                    if (overlayCheck['has_overlay'] == true) {
+                                      if (modalCtx.mounted) {
+                                        setModalState(() {
+                                          isOverlayReady = false;
+                                          overlayReason = overlayCheck['reason']?.toString() ?? 'Jendela mengambang terdeteksi';
+                                        });
+                                        AppNotification.showError(
+                                          modalCtx,
+                                          'Aplikasi Mengambang Terdeteksi!',
+                                          subtitle: overlayCheck['reason']?.toString() ?? 'Tutup semua jendela mengambang, bubble chat, atau split screen sebelum masuk ujian.',
+                                        );
+                                      }
+                                      return;
+                                    }
+
+                                    // 2. Final Bluetooth re-verification
+                                    final btActive = await VolumeLockService.isBluetoothEnabled();
+                                    if (btActive) {
+                                      if (modalCtx.mounted) {
+                                        setModalState(() {
+                                          isBtOff = false;
+                                        });
+                                        AppNotification.showError(
+                                          modalCtx,
+                                          'Koneksi Bluetooth Aktif!',
+                                          subtitle: 'Matikan Bluetooth sebelum melanjutkan masuk ke ujian.',
+                                        );
+                                      }
+                                      return;
+                                    }
+
+                                    // 3. Final Phone Call re-verification
+                                    final callActive = await VolumeLockService.isPhoneCallActive();
+                                    final examId = exam['id'];
+                                    if (examId != null) {
+                                      try {
+                                        await _api.post(
+                                          ApiEndpoints.phoneCallStatus,
+                                          data: {
+                                            'link_id': examId,
+                                            'is_on_call': callActive,
+                                          },
+                                        );
+                                      } catch (_) {}
+                                    }
+                                    if (callActive) {
+                                      if (modalCtx.mounted) {
+                                        setModalState(() {
+                                          isNoCallActive = false;
+                                        });
+                                        AppNotification.showError(
+                                          modalCtx,
+                                          'Panggilan Suara Aktif!',
+                                          subtitle: 'Tutup panggilan telepon sebelum masuk ke ruang ujian.',
+                                        );
+                                      }
+                                      return;
+                                    }
+
                                     final currentNet = await VolumeLockService.getNetworkType();
                                     if (currentNet == 'none') {
                                       if (modalCtx.mounted) {
@@ -799,8 +907,9 @@ class _ExamListScreenState extends State<ExamListScreen> {
               ),
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   },
 );

@@ -7,6 +7,7 @@ class ConfirmUnlockDialog extends StatelessWidget {
   final String? violationReason;
   final String? examTitle;
   final String? deviceName;
+  final String? timestamp;
 
   const ConfirmUnlockDialog({
     super.key,
@@ -15,6 +16,7 @@ class ConfirmUnlockDialog extends StatelessWidget {
     this.violationReason,
     this.examTitle,
     this.deviceName,
+    this.timestamp,
   });
 
   static Future<bool> show({
@@ -24,6 +26,7 @@ class ConfirmUnlockDialog extends StatelessWidget {
     String? violationReason,
     String? examTitle,
     String? deviceName,
+    String? timestamp,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -34,35 +37,58 @@ class ConfirmUnlockDialog extends StatelessWidget {
         violationReason: violationReason,
         examTitle: examTitle,
         deviceName: deviceName,
+        timestamp: timestamp,
       ),
     );
     return result ?? false;
   }
 
-  String _formatReason(String? reason) {
-    switch (reason) {
-      case 'proctor_kick':
-        return 'Dikeluarkan Pengawas';
-      case 'split_screen':
-        return 'Layar Terbelah (Split Screen)';
-      case 'app_switch':
-      case 'app_minimize':
-        return 'Pindah Aplikasi / Minimize';
-      case 'screenshot_attempt':
-        return 'Percobaan Screenshot Layar';
-      case 'phone_call_detected':
-        return 'Panggilan Suara / Telepon Masuk';
-      case 'bluetooth_enabled':
-        return 'Koneksi Bluetooth Aktif';
-      case 'external_display':
-        return 'Layar Eksternal / HDMI';
-      case 'overlay_detected':
-        return 'Jendela Mengambang (Floating Window)';
-      case 'notification_pulldown':
-        return 'Buka Bar Notifikasi';
-      default:
-        return reason ?? 'Indikasi Pelanggaran Keamanan';
+  static String formatTimestamp(String? raw) {
+    if (raw == null || raw.isEmpty) return '-';
+    if (raw.contains('WIB')) return raw;
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+        'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+      ];
+      final day = dt.day;
+      final month = months[dt.month - 1];
+      final year = dt.year;
+      final hour = dt.hour.toString().padLeft(2, '0');
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final second = dt.second.toString().padLeft(2, '0');
+      return '$day $month $year, $hour:$minute:$second WIB';
+    } catch (_) {
+      return raw;
     }
+  }
+
+  String _formatReason(String? reason) {
+    if (reason == null || reason.isEmpty) return 'Indikasi Pelanggaran Keamanan';
+    final lower = reason.toLowerCase();
+    if (lower.contains('proctor_kick') || lower.contains('kicked')) {
+      return 'Dikeluarkan Pengawas';
+    } else if (lower.contains('split') || lower.contains('multi_window')) {
+      return 'Layar Terbelah (Split Screen)';
+    } else if (lower.contains('minimize')) {
+      return 'Keluar dari Aplikasi (Minimize)';
+    } else if (lower.contains('app_switch') || lower.contains('switch')) {
+      return 'Pindah Aplikasi';
+    } else if (lower.contains('screenshot') || lower.contains('capture')) {
+      return 'Percobaan Screenshot Layar';
+    } else if (lower.contains('phone_call') || lower.contains('call')) {
+      return 'Panggilan Suara / Telepon Masuk';
+    } else if (lower.contains('bluetooth')) {
+      return 'Koneksi Bluetooth Aktif';
+    } else if (lower.contains('external_display') || lower.contains('hdmi') || lower.contains('mirroring')) {
+      return 'Layar Eksternal / HDMI';
+    } else if (lower.contains('overlay') || lower.contains('floating')) {
+      return 'Jendela Mengambang (Floating Window)';
+    } else if (lower.contains('notification') || lower.contains('pulldown')) {
+      return 'Buka Bar Notifikasi';
+    }
+    return reason;
   }
 
   @override
@@ -238,6 +264,29 @@ class ConfirmUnlockDialog extends StatelessWidget {
                             ),
                           ],
                         ),
+                      ),
+                    ],
+                    if (timestamp != null && timestamp!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.access_time_rounded,
+                            size: 13.5,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Waktu Kejadian: ${formatTimestamp(timestamp)}',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ],

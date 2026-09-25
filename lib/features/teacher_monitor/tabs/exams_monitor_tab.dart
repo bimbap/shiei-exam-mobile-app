@@ -1969,6 +1969,7 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
                             examTitle: examTitle,
                             nisn: nisn,
                             deviceName: deviceName,
+                            timestamp: user['locked_at']?.toString() ?? user['lock_time']?.toString() ?? user['updated_at']?.toString(),
                           );
                           if (confirmed && mounted) {
                             final ok = await widget.controller.unlockStudent(linkId, userId);

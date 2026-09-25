@@ -68,6 +68,7 @@ class TeacherPortalController extends ChangeNotifier {
   bool _hasCompletedInitialLoad = false;
   Set<int> _knownBlockedStudentIds = {};
   Map<String, dynamic>? _latestFraudAlert;
+  final List<Map<String, dynamic>> _activeFraudAlerts = [];
   AudioPlayer? _fraudAlertPlayer;
   Timer? _fraudSoundTimer;
   bool _isTourActive = false;
@@ -99,7 +100,9 @@ class TeacherPortalController extends ChangeNotifier {
 
   String? get monitorFilter => _monitorStatusFilter;
   bool get fraudAlertEnabled => _fraudAlertEnabled;
-  Map<String, dynamic>? get latestFraudAlert => _latestFraudAlert;
+  List<Map<String, dynamic>> get activeFraudAlerts => List.unmodifiable(_activeFraudAlerts);
+  Map<String, dynamic>? get latestFraudAlert =>
+      _activeFraudAlerts.isNotEmpty ? _activeFraudAlerts.first : _latestFraudAlert;
   String? get errorMessage => _errorMessage;
   Map<String, dynamic>? get currentUser => _currentUser;
   Map<String, dynamic>? get school => _school;
@@ -1456,6 +1459,12 @@ class TeacherPortalController extends ChangeNotifier {
           currentBlocked.add(intId);
           if (!_knownBlockedStudentIds.contains(intId)) {
             newlyBlockedStudent = r;
+            // Add to active alerts list, ensuring no duplicate entries
+            _activeFraudAlerts.removeWhere((a) {
+              final aId = a['user_id'] ?? a['student_id'] ?? a['user']?['id'] ?? a['id'];
+              return aId.toString() == intId.toString();
+            });
+            _activeFraudAlerts.insert(0, r);
           }
         }
       }
@@ -1463,7 +1472,7 @@ class TeacherPortalController extends ChangeNotifier {
 
     // Only alert after initial fetch has set the baseline
     if (_hasCompletedInitialLoad && newlyBlockedStudent != null && _fraudAlertEnabled) {
-      _latestFraudAlert = newlyBlockedStudent;
+      _latestFraudAlert = _activeFraudAlerts.isNotEmpty ? _activeFraudAlerts.first : newlyBlockedStudent;
       _triggerFraudAlert();
     }
 
@@ -1532,8 +1541,38 @@ class TeacherPortalController extends ChangeNotifier {
     _triggerFraudAlert();
   }
 
+  void dismissFraudAlert(int index) {
+    if (index >= 0 && index < _activeFraudAlerts.length) {
+      _activeFraudAlerts.removeAt(index);
+      if (_activeFraudAlerts.isEmpty) {
+        _latestFraudAlert = null;
+        stopFraudAlertSound();
+      } else {
+        _latestFraudAlert = _activeFraudAlerts.first;
+      }
+      notifyListeners();
+    }
+  }
+
+  void removeFraudAlertForStudent(dynamic studentId) {
+    if (studentId == null) return;
+    _activeFraudAlerts.removeWhere((a) {
+      final aId = a['user_id'] ?? a['student_id'] ?? a['user']?['id'] ?? a['id'];
+      return aId.toString() == studentId.toString();
+    });
+    if (_activeFraudAlerts.isEmpty) {
+      _latestFraudAlert = null;
+      stopFraudAlertSound();
+    } else {
+      _latestFraudAlert = _activeFraudAlerts.first;
+    }
+    notifyListeners();
+  }
+
   void clearFraudAlert() {
+    _activeFraudAlerts.clear();
     _latestFraudAlert = null;
+    stopFraudAlertSound();
     notifyListeners();
   }
 

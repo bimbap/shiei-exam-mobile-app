@@ -9,6 +9,7 @@ import '../../config/routes.dart';
 import '../../core/api/api_client.dart';
 import '../../core/api/endpoints.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/auth/auth_service.dart';
 import '../../core/lockdown/cheat_reporter.dart';
 import '../../core/lockdown/lockdown_service.dart';
 import '../../core/lockdown/volume_lock_service.dart';
@@ -34,7 +35,9 @@ class ExamPlayerScreen extends StatefulWidget {
 
 class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   final _api = ApiClient();
+  final _auth = AuthService();
   final _lockdown = LockdownService();
+  Map<String, String>? _deviceDetails;
   InAppWebViewController? _webViewController;
   Timer? _monitoringPoller;
   Timer? _clockTimer;
@@ -123,8 +126,15 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     _fetchAnnouncements();
 
     // 1. Enforce native screen pinning (LockTask) and suppress external system status bar (WhatsApp/Alarm/Wi-Fi icons)
-    VolumeLockService.startLockTask();
-    VolumeLockService.setKioskSystemBarsBlocked(true);
+    // Only engage full hardware pinning if exit bypass is disabled.
+    TokenStorage.isAppExitBypassEnabled().then((bypassActive) {
+      if (!bypassActive) {
+        VolumeLockService.startLockTask();
+        VolumeLockService.setKioskSystemBarsBlocked(true);
+      } else {
+        debugPrint('[ExamPlayer] Kiosk lock task & system bar blocking bypassed in debug mode.');
+      }
+    });
     VolumeLockService.lockOrientationPortrait(true);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -182,6 +192,21 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       return;
     }
 
+    // Pre-flight Step: Hardware device identity verification & auto-binding
+    try {
+      _deviceDetails = await _auth.getDeviceDetails();
+      final verifyRes = await _auth.verifyDevice();
+      if (verifyRes['status'] == 'error' && (verifyRes['message']?.toString().contains('does not match') ?? false)) {
+        if (mounted) {
+          setState(() {
+            _isHandshakeInProgress = false;
+            _handshakeErrorMessage = 'Perangkat tidak sesuai dengan HP yang terdaftar untuk akun ini.\nSilakan hubungi pengawas untuk mereset kunci perangkat.';
+          });
+        }
+        return;
+      }
+    } catch (_) {}
+
     final ok = await _recordProgress('in_progress');
     if (!mounted) return;
 
@@ -203,8 +228,9 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   }
 
   void _startHeartbeatTicker() {
-    // Continuous 12-second heartbeat & live announcement sync
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
+    // Continuous 4-second heartbeat & live announcement sync
+    // Guarantees student stays within the 10-second active threshold
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted || _isSubmitting) return;
       await _recordProgress('in_progress');
       _fetchAnnouncements();
@@ -216,15 +242,17 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     _monitoringPoller = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted || _isSubmitting) return;
 
-      _lockdown.checkSplitScreen();
-      _lockdown.checkBluetooth();
       _lockdown.checkPhoneCallState();
+      _lockdown.checkSplitScreen();
+      _lockdown.checkOverlay();
+      _lockdown.checkBluetooth();
       _lockdown.checkExternalDisplay();
 
       final net = await VolumeLockService.getNetworkType();
       final b = await VolumeLockService.getBatteryLevel();
       final c = await VolumeLockService.isDeviceCharging();
       if (mounted && (b != _batteryLevel || c != _isCharging || net != _networkType)) {
+        final chargingChanged = (c != _isCharging);
         setState(() {
           if (b >= 0) _batteryLevel = b;
           _isCharging = c;
@@ -233,6 +261,9 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
             _isTrackingInterrupted = true;
           }
         });
+        if (chargingChanged) {
+          _lockdown.checkChargingState();
+        }
       }
 
       // Auto-recovery ping when tracking is interrupted
@@ -266,6 +297,9 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
 
   Future<bool> _recordProgress(String status) async {
     try {
+      if (_deviceDetails == null) {
+        _deviceDetails = await _auth.getDeviceDetails();
+      }
       final isCharging = await VolumeLockService.isDeviceCharging();
       final battery = await VolumeLockService.getBatteryLevel();
       final network = await VolumeLockService.getNetworkType();
@@ -277,6 +311,10 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
           'is_charging': isCharging,
           'battery_level': battery,
           'network_type': network,
+          'serial_number': _deviceDetails?['serial_number'],
+          'device_name': _deviceDetails?['device_name'],
+          'device_id': _deviceDetails?['device_id'],
+          'android_version': _deviceDetails?['android_version'],
         },
       );
 

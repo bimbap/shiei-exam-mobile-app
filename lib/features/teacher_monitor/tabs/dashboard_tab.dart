@@ -481,9 +481,13 @@ class DashboardTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // 2. Fraud Alert Banner (Triggered upon student cheat / ejection)
-          if (controller.latestFraudAlert != null) ...[
-            _buildFraudAlertCard(context, controller.latestFraudAlert!, isDark),
+          // 2. Fraud Alert Carousel (Triggered upon student cheat / ejection)
+          if (controller.activeFraudAlerts.isNotEmpty) ...[
+            _FraudAlertsCarousel(
+              controller: controller,
+              isDark: isDark,
+              onShowDetail: _showFraudAlertDetailSheet,
+            ),
             const SizedBox(height: 16),
           ],
 
@@ -1521,121 +1525,58 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  Widget _buildFraudAlertCard(BuildContext context, Map<String, dynamic> alert, bool isDark) {
-    final user = alert['user'] as Map<String, dynamic>? ?? {};
-    final studentName = user['name']?.toString() ?? alert['name']?.toString() ?? 'Siswa';
-    final reason = alert['lock_reason']?.toString() ?? alert['event_type']?.toString() ?? 'Terdeteksi keluar dari aplikasi';
-    final linkId = alert['link_id'] ?? alert['exam_id'];
-    final userId = user['id'] ?? alert['user_id'] ?? alert['student_id'];
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withValues(alpha: isDark ? 0.16 : 0.08),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFEF4444).withValues(alpha: 0.5),
-          width: 1.5,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEF4444),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '🚨 PELANGGARAN TERDETEKSI!',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFFEF4444),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    Text(
-                      '$studentName • $reason',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 18),
-                onPressed: controller.clearFraudAlert,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 16),
-                  label: const Text('Scan QR Buka Kunci', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  onPressed: () {
-                    QrUnblockScannerDialog.show(context: context, controller: controller);
-                  },
-                ),
-              ),
-              if (linkId != null && userId != null) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFEF4444),
-                    side: const BorderSide(color: Color(0xFFEF4444)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                  icon: const Icon(Icons.remove_red_eye_outlined, size: 15),
-                  label: const Text('Lihat Detail', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
-                  onPressed: () => _showFraudAlertDetailSheet(context, alert),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
+
+  static String formatReason(String? reason) {
+    if (reason == null || reason.isEmpty) return 'Pelanggaran Keamanan';
+    final lower = reason.toLowerCase();
+    if (lower.contains('proctor_kick') || lower.contains('kicked')) {
+      return 'Dikeluarkan Pengawas';
+    } else if (lower.contains('split') || lower.contains('multi_window')) {
+      return 'Layar Terbelah (Split Screen)';
+    } else if (lower.contains('overlay') || lower.contains('floating')) {
+      return 'Jendela Mengambang (Overlay)';
+    } else if (lower.contains('minimize')) {
+      return 'Keluar Aplikasi (Minimize)';
+    } else if (lower.contains('app_switch') || lower.contains('switch')) {
+      return 'Pindah Aplikasi';
+    } else if (lower.contains('screenshot') || lower.contains('capture')) {
+      return 'Percobaan Tangkapan Layar';
+    } else if (lower.contains('pip')) {
+      return 'Mode Picture-in-Picture';
+    } else if (lower.contains('phone_call') || lower.contains('call')) {
+      return 'Panggilan Suara / Telepon';
+    } else if (lower.contains('bluetooth')) {
+      return 'Koneksi Bluetooth Aktif';
+    } else if (lower.contains('external_display') || lower.contains('hdmi') || lower.contains('mirroring')) {
+      return 'Layar Eksternal / Mirroring';
+    } else if (lower.contains('notification') || lower.contains('pulldown')) {
+      return 'Buka Bar Notifikasi';
+    }
+    return reason;
   }
 
   void _showFraudAlertDetailSheet(BuildContext context, Map<String, dynamic> alert) {
     final isDark = AppTheme.isDark(context);
     final studentName = alert['student_name']?.toString() ?? 'Siswa';
-    final reason = alert['reason']?.toString() ?? 'Pelanggaran Keamanan';
+    final rawReason = alert['lock_reason']?.toString() ??
+        alert['reason']?.toString() ??
+        alert['event_type']?.toString();
+    final reason = formatReason(rawReason);
     final examTitle = alert['exam_title']?.toString() ?? 'Sesi Ujian';
     final linkId = alert['exam_id'] ?? alert['link_id'];
     final userId = alert['student_id'] ?? alert['user_id'];
-    final timestamp = alert['timestamp']?.toString();
+    final rawTs = alert['locked_at'] ??
+        alert['timestamp'] ??
+        alert['occurred_at'] ??
+        alert['created_at'] ??
+        alert['updated_at'];
+    final formattedTimestamp = ConfirmUnlockDialog.formatTimestamp(rawTs?.toString());
 
-    final bool isKicked = reason == 'proctor_kick' || alert['is_kicked'] == true || alert['status'] == 'terminated';
+    final bool isKicked = rawReason == 'proctor_kick' ||
+        reason.toLowerCase().contains('pengawas') ||
+        alert['is_kicked'] == true ||
+        alert['status'] == 'terminated';
     final bool isExamEnded = alert['is_exam_ended'] == true;
     final bool canManageStudent = controller.isAdmin || controller.canUnlockStudentForExam(linkId);
     final bool canUnlock = linkId != null && userId != null && !isKicked && !isExamEnded && canManageStudent;
@@ -1729,9 +1670,15 @@ class DashboardTab extends StatelessWidget {
                       valueColor: const Color(0xFFEF4444),
                       isBold: true,
                     ),
-                    if (timestamp != null) ...[
+                    if (rawTs != null) ...[
                       const Divider(height: 16),
-                      _buildAlertDetailRow('Waktu Deteksi', timestamp, isDark),
+                      _buildAlertDetailRow(
+                        'Waktu Kejadian',
+                        formattedTimestamp,
+                        isDark,
+                        valueColor: isDark ? const Color(0xFFF1F5F9) : const Color(0xFF0F172A),
+                        isBold: true,
+                      ),
                     ],
                   ],
                 ),
@@ -1774,15 +1721,16 @@ class DashboardTab extends StatelessWidget {
                           final confirmed = await ConfirmUnlockDialog.show(
                             context: context,
                             studentName: studentName,
-                            violationReason: reason,
+                            violationReason: rawReason ?? reason,
                             examTitle: examTitle,
+                            timestamp: rawTs != null ? formattedTimestamp : null,
                           );
 
                           if (confirmed && context.mounted) {
                             Navigator.pop(sheetCtx);
                             final ok = await controller.unlockStudent(intLinkId, intUserId);
                             if (context.mounted && ok) {
-                              controller.clearFraudAlert();
+                              controller.removeFraudAlertForStudent(intUserId);
                               AppNotification.showSuccess(
                                 context,
                                 'Kunci Berhasil Dibuka',
@@ -1890,6 +1838,334 @@ class DashboardTab extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _FraudAlertsCarousel extends StatefulWidget {
+  final TeacherPortalController controller;
+  final bool isDark;
+  final void Function(BuildContext context, Map<String, dynamic> alert) onShowDetail;
+
+  const _FraudAlertsCarousel({
+    required this.controller,
+    required this.isDark,
+    required this.onShowDetail,
+  });
+
+  @override
+  State<_FraudAlertsCarousel> createState() => _FraudAlertsCarouselState();
+}
+
+class _FraudAlertsCarouselState extends State<_FraudAlertsCarousel> {
+  late final PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  String _formatReason(String? reason) => DashboardTab.formatReason(reason);
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = widget.controller.activeFraudAlerts;
+    if (alerts.isEmpty) return const SizedBox.shrink();
+
+    // Clamp current page if list shrank
+    if (_currentPage >= alerts.length) {
+      _currentPage = alerts.length - 1;
+    }
+
+    final isMulti = alerts.length > 1;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 136,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: alerts.length,
+            onPageChanged: (idx) {
+              setState(() {
+                _currentPage = idx;
+              });
+            },
+            itemBuilder: (context, index) {
+              final alert = alerts[index];
+              final studentName = alert['student_name']?.toString() ?? 'Siswa';
+              final rawReason = alert['lock_reason']?.toString() ??
+                  alert['reason']?.toString() ??
+                  alert['event_type']?.toString();
+              final cleanReason = _formatReason(rawReason);
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF2E1114),
+                      Color(0xFF1B0B0E),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Header row
+                    Row(
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            color: Color(0xFFEF4444),
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    '🚨 PELANGGARAN TERDETEKSI!',
+                                    style: TextStyle(
+                                      color: Color(0xFFF87171),
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                  if (isMulti) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEF4444).withValues(alpha: 0.25),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '${index + 1}/${alerts.length}',
+                                        style: const TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFFFCA5A5),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              RichText(
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: studentName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const TextSpan(
+                                      text: '  •  ',
+                                      style: TextStyle(
+                                        color: Color(0xFF94A3B8),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: cleanReason,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        color: Color(0xFFFDA4AF),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => widget.controller.dismissFraudAlert(index),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Actions row: PRIORITIZE "Lihat Detail", Secondary "Scan QR"
+                    Row(
+                      children: [
+                        // Primary: Lihat Detail & Buka Kunci
+                        Expanded(
+                          flex: 3,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
+                            label: const Text(
+                              'Lihat Detail & Buka Kunci',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                            onPressed: () => widget.onShowDetail(context, alert),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Secondary: Scan QR (compact)
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFA78BFA),
+                            side: BorderSide(
+                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                              width: 1,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
+                          ),
+                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 15),
+                          label: const Text(
+                            'Scan QR',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                          onPressed: () => QrUnblockScannerDialog.show(
+                            context: context,
+                            controller: widget.controller,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+        if (isMulti) ...[
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final screenWidth = MediaQuery.of(context).size.width;
+              // Responsive max dots: 5 for small screens (< 380px), 10 for normal/large screens
+              final int maxDots = screenWidth < 380 ? 5 : 10;
+              final int total = alerts.length;
+
+              if (total <= maxDots) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(total, (i) {
+                    final isCurrent = i == _currentPage;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: isCurrent ? 14 : 5,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isCurrent ? const Color(0xFFEF4444) : Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                );
+              }
+
+              // Sliding window centered around _currentPage
+              int startIndex = _currentPage - (maxDots ~/ 2);
+              if (startIndex < 0) {
+                startIndex = 0;
+              } else if (startIndex + maxDots > total) {
+                startIndex = total - maxDots;
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(maxDots, (index) {
+                  final actualIndex = startIndex + index;
+                  final isCurrent = actualIndex == _currentPage;
+                  final isEdge = (index == 0 && startIndex > 0) ||
+                      (index == maxDots - 1 && startIndex + maxDots < total);
+
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isCurrent ? 14 : (isEdge ? 3.5 : 5),
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? const Color(0xFFEF4444)
+                          : (isEdge ? Colors.white12 : Colors.white24),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ],
       ],
     );
   }

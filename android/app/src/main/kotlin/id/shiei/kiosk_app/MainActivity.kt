@@ -21,6 +21,7 @@ import android.provider.Settings
 import android.telephony.PhoneStateListener
 import android.telephony.TelephonyManager
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -38,6 +39,14 @@ import android.content.ContentValues
 import android.os.Environment
 import android.provider.MediaStore
 import java.util.Locale
+import android.content.res.Configuration
+import android.media.AudioPlaybackConfiguration
+import android.media.AudioRecordingConfiguration
+import android.media.AudioAttributes
+import android.media.MediaRecorder
+import android.telecom.TelecomManager
+import android.os.SystemClock
+import android.util.DisplayMetrics
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "id.shiei/lockdown"
@@ -46,10 +55,23 @@ class MainActivity : FlutterActivity() {
     private var audioManager: AudioManager? = null
     private var volumeObserver: ContentObserver? = null
     private var telephonyManager: TelephonyManager? = null
+    private var telecomManager: TelecomManager? = null
     private var isPhoneCallActive = false
+    private var lastPhoneCallDetectedTime = 0L
     private var isKioskSystemBarsBlocked = false
+    private var hasDetectedObscuredTouch = false
+    private var lastObscuredTouchTime = 0L
+    private var isMultiWindowDetected = false
+    private var isPipDetected = false
+    private var lastTimeNotTopResumed = 0L
+    private var isActivityStopped = false
+    private var hasAnotherActivityTakenTopResume = false
+    private var lastTimeAnotherActivityTopResumed = 0L
     private var screenshotEventSink: EventChannel.EventSink? = null
     private var screenshotCallback: Any? = null // holds ScreenCaptureCallback on API 34+
+    private var screenshotObserver: ContentObserver? = null
+    private var lastScreenshotTimestamp = 0L
+    private var lastVolumeDownTime = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +79,9 @@ class MainActivity : FlutterActivity() {
         // FLAG_SECURE is strictly toggled on when actively taking an exam.
         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        telecomManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
+        } else null
 
         // Edge-to-edge transparent system bars (matching modern Android & Google Files)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -72,8 +97,8 @@ class MainActivity : FlutterActivity() {
         // Hide overlay windows (floating apps, chat heads, screen translators)
         applyOverlayProtection(true)
 
-        // Initialize phone call listener so incoming phone calls do not trigger anti-cheat ejection
-        initTelephonyListener()
+        // Initialize comprehensive cellular & 3rd-party VoIP call detection
+        initCallDetection()
 
         @Suppress("DEPRECATION")
         window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
@@ -82,6 +107,9 @@ class MainActivity : FlutterActivity() {
                 collapseStatusBar()
             }
         }
+
+        // Detect touch events obscured by floating windows or overlays
+        window.decorView.filterTouchesWhenObscured = true
     }
 
     private fun applyOverlayProtection(enable: Boolean) {
@@ -101,7 +129,8 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun initTelephonyListener() {
+    private fun initCallDetection() {
+        // 1. Cellular SIM call state listener
         try {
             telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -109,7 +138,11 @@ class MainActivity : FlutterActivity() {
                     mainExecutor,
                     object : android.telephony.TelephonyCallback(), android.telephony.TelephonyCallback.CallStateListener {
                         override fun onCallStateChanged(state: Int) {
-                            isPhoneCallActive = (state == TelephonyManager.CALL_STATE_RINGING || state == TelephonyManager.CALL_STATE_OFFHOOK)
+                            val active = (state == TelephonyManager.CALL_STATE_RINGING || state == TelephonyManager.CALL_STATE_OFFHOOK)
+                            isPhoneCallActive = active
+                            if (active) {
+                                lastPhoneCallDetectedTime = SystemClock.elapsedRealtime()
+                            }
                         }
                     }
                 )
@@ -119,12 +152,153 @@ class MainActivity : FlutterActivity() {
                     @Deprecated("Deprecated in Java")
                     override fun onCallStateChanged(state: Int, phoneNumber: String?) {
                         super.onCallStateChanged(state, phoneNumber)
-                        isPhoneCallActive = (state == TelephonyManager.CALL_STATE_RINGING || state == TelephonyManager.CALL_STATE_OFFHOOK)
+                        val active = (state == TelephonyManager.CALL_STATE_RINGING || state == TelephonyManager.CALL_STATE_OFFHOOK)
+                        isPhoneCallActive = active
+                        if (active) {
+                            lastPhoneCallDetectedTime = SystemClock.elapsedRealtime()
+                        }
                     }
                 }, PhoneStateListener.LISTEN_CALL_STATE)
             }
         } catch (e: Exception) {
             isPhoneCallActive = false
+        }
+
+        // 2. Real-time AudioRecordingCallback for 3rd-party VoIP calls (WhatsApp, Telegram, Discord, Line mic capture)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            try {
+                audioManager?.registerAudioRecordingCallback(object : AudioManager.AudioRecordingCallback() {
+                    override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>?) {
+                        super.onRecordingConfigChanged(configs)
+                        configs?.forEach { cfg ->
+                            val src = cfg.audioSource
+                            if (src == MediaRecorder.AudioSource.VOICE_COMMUNICATION ||
+                                src == MediaRecorder.AudioSource.VOICE_RECOGNITION ||
+                                src == MediaRecorder.AudioSource.VOICE_CALL ||
+                                src == MediaRecorder.AudioSource.MIC) {
+                                lastPhoneCallDetectedTime = SystemClock.elapsedRealtime()
+                            }
+                        }
+                    }
+                }, Handler(Looper.getMainLooper()))
+            } catch (_: Exception) {}
+        }
+
+        // 3. Real-time AudioPlaybackCallback for 3rd-party VoIP audio playback or incoming ringtones
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                audioManager?.registerAudioPlaybackCallback(object : AudioManager.AudioPlaybackCallback() {
+                    override fun onPlaybackConfigChanged(configs: List<AudioPlaybackConfiguration>?) {
+                        super.onPlaybackConfigChanged(configs)
+                        configs?.forEach { cfg ->
+                            val usage = cfg.audioAttributes?.usage ?: 0
+                            if (usage == AudioAttributes.USAGE_VOICE_COMMUNICATION ||
+                                usage == AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING ||
+                                usage == AudioAttributes.USAGE_NOTIFICATION_RINGTONE) {
+                                lastPhoneCallDetectedTime = SystemClock.elapsedRealtime()
+                            }
+                        }
+                    }
+                }, Handler(Looper.getMainLooper()))
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun checkIfPhoneOrVoipCallActive(): Boolean {
+        try {
+            val now = SystemClock.elapsedRealtime()
+
+            // 1. Cellular phone call state via listener flag
+            if (isPhoneCallActive) {
+                lastPhoneCallDetectedTime = now
+                return true
+            }
+
+            // 2. Direct TelephonyManager query
+            try {
+                @Suppress("DEPRECATION")
+                val callState = telephonyManager?.callState
+                if (callState != null && callState != TelephonyManager.CALL_STATE_IDLE) {
+                    lastPhoneCallDetectedTime = now
+                    return true
+                }
+            } catch (_: Exception) {}
+
+            // 3. TelecomManager (API 26+ / API 29+)
+            // Covers ConnectionService calls (WhatsApp, Google Meet, Skype, etc. registered with Android Telecom)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    if (telecomManager?.isInCall == true) {
+                        lastPhoneCallDetectedTime = now
+                        return true
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && telecomManager?.isInManagedCall == true) {
+                        lastPhoneCallDetectedTime = now
+                        return true
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 4. AudioManager mode check
+            // MODE_IN_CALL: 2 (Traditional cellular call)
+            // MODE_IN_COMMUNICATION: 3 (VoIP call: WhatsApp, Telegram, Discord, Line, Zoom, Meet, Teams)
+            // MODE_RINGTONE: 1 (Device is ringing from incoming cellular or VoIP call)
+            // MODE_CALL_SCREENING: 4 (API 30+ Call screening)
+            val audioMode = audioManager?.mode ?: AudioManager.MODE_NORMAL
+            if (audioMode == AudioManager.MODE_IN_CALL ||
+                audioMode == AudioManager.MODE_IN_COMMUNICATION ||
+                audioMode == AudioManager.MODE_RINGTONE ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && audioMode == AudioManager.MODE_CALL_SCREENING)) {
+                lastPhoneCallDetectedTime = now
+                return true
+            }
+
+            // 5. Active recording configurations (VoIP app is actively using microphone)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                try {
+                    val recordingConfigs = audioManager?.activeRecordingConfigurations
+                    if (!recordingConfigs.isNullOrEmpty()) {
+                        for (cfg in recordingConfigs) {
+                            val src = cfg.audioSource
+                            if (src == MediaRecorder.AudioSource.VOICE_COMMUNICATION ||
+                                src == MediaRecorder.AudioSource.VOICE_RECOGNITION ||
+                                src == MediaRecorder.AudioSource.VOICE_CALL) {
+                                lastPhoneCallDetectedTime = now
+                                return true
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 6. Active playback configurations (VoIP incoming speech or ringtone)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val playbackConfigs = audioManager?.activePlaybackConfigurations
+                    if (!playbackConfigs.isNullOrEmpty()) {
+                        for (cfg in playbackConfigs) {
+                            val usage = cfg.audioAttributes?.usage ?: 0
+                            if (usage == AudioAttributes.USAGE_VOICE_COMMUNICATION ||
+                                usage == AudioAttributes.USAGE_VOICE_COMMUNICATION_SIGNALLING ||
+                                usage == AudioAttributes.USAGE_NOTIFICATION_RINGTONE) {
+                                lastPhoneCallDetectedTime = now
+                                return true
+                            }
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 7. Hysteresis buffer: if a call was active or ringing within the last 5 seconds,
+            // maintain true. This avoids race conditions during activity pause/resume transitions
+            // where an incoming call heads-up notification just appeared or dismissed.
+            if (lastPhoneCallDetectedTime > 0L && (now - lastPhoneCallDetectedTime) < 5000L) {
+                return true
+            }
+
+            return false
+        } catch (_: Exception) {
+            return false
         }
     }
 
@@ -161,10 +335,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "isPhoneCallActive" -> {
-                    val isVoip = audioManager?.let {
-                        it.mode == AudioManager.MODE_IN_CALL || it.mode == AudioManager.MODE_IN_COMMUNICATION
-                    } ?: false
-                    result.success(isPhoneCallActive || isVoip)
+                    result.success(checkIfPhoneOrVoipCallActive())
                 }
 
                 "forceMaxVolume" -> {
@@ -216,6 +387,130 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
 
+
+                "detectFloatingWindowOrOverlay" -> {
+                    try {
+                        var hasOverlay = false
+                        var reason = ""
+
+                        // Priority Check: If a cellular or 3rd-party VoIP phone call is active or ringing,
+                        // it must be handled as a phone call event, NOT a generic floating window / overlay!
+                        if (checkIfPhoneOrVoipCallActive()) {
+                            result.success(mapOf(
+                                "has_overlay" to false,
+                                "reason" to "",
+                                "is_call_active" to true
+                            ))
+                            return@setMethodCallHandler
+                        }
+
+                        // 1. Multi-window / Split-screen / Freeform floating window
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && (isInMultiWindowMode || isMultiWindowDetected)) {
+                            hasOverlay = true
+                            reason = "Mode Layar Terbagi (Split Screen / Multi-Window) terdeteksi aktif."
+                        }
+
+                        // 2. Picture-in-Picture check
+                        if (!hasOverlay && isPipDetected) {
+                            hasOverlay = true
+                            reason = "Mode Picture-in-Picture (PiP) terdeteksi aktif."
+                        }
+
+                        // 3. Window metrics check (detect if app bounds are constrained by freeform/pop-up/split screen)
+                        if (!hasOverlay) {
+                            try {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    val currentBounds = windowManager.currentWindowMetrics.bounds
+                                    val maxBounds = windowManager.maximumWindowMetrics.bounds
+                                    if (currentBounds.width() < (maxBounds.width() * 0.90) || currentBounds.height() < (maxBounds.height() * 0.85)) {
+                                        hasOverlay = true
+                                        reason = "Layar terbagi (Split Screen / Pop-up Window terdeteksi)."
+                                    }
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    val dm = DisplayMetrics()
+                                    @Suppress("DEPRECATION")
+                                    windowManager.defaultDisplay.getMetrics(dm)
+                                    val realDm = DisplayMetrics()
+                                    @Suppress("DEPRECATION")
+                                    windowManager.defaultDisplay.getRealMetrics(realDm)
+                                    if (dm.widthPixels < (realDm.widthPixels * 0.90) || dm.heightPixels < (realDm.heightPixels * 0.80)) {
+                                        hasOverlay = true
+                                        reason = "Layar terbagi (Split Screen / Pop-up Window terdeteksi)."
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        // 4. Window focus check (another window/dialog/overlay stealing window focus)
+                        if (!hasOverlay && !window.decorView.hasWindowFocus()) {
+                            hasOverlay = true
+                            reason = "Jendela mengambang atau aplikasi lain sedang fokus di atas layar."
+                        }
+
+                        // 5. Another activity took top resumed while this activity was visible (floating window/bubble/pop-up)
+                        if (!hasOverlay && hasAnotherActivityTakenTopResume && (System.currentTimeMillis() - lastTimeAnotherActivityTopResumed < 45000L)) {
+                            hasOverlay = true
+                            reason = "Jendela mengambang (Pop-up View / Floating App) terdeteksi aktif."
+                        }
+
+                        // 6. Recent top resumed loss (another app took focus within last 15 seconds)
+                        if (!hasOverlay && (System.currentTimeMillis() - lastTimeNotTopResumed < 15000L)) {
+                            hasOverlay = true
+                            reason = "Aplikasi mengambang terdeteksi aktif di atas layar."
+                        }
+
+                        // 7. Touch obscurity check (touch received while any overlay/bubble covers part of screen)
+                        if (!hasOverlay && (hasDetectedObscuredTouch || (lastObscuredTouchTime > 0L && (System.currentTimeMillis() - lastObscuredTouchTime < 45000L)))) {
+                            hasOverlay = true
+                            reason = "Layar terhalang oleh jendela mengambang (Pop-up View / Chat Bubble / Overlay)."
+                        }
+
+                        // 8. Active media/video playback check (YouTube PiP / Floating Video)
+                        if (!hasOverlay) {
+                            try {
+                                if (audioManager?.isMusicActive == true) {
+                                    hasOverlay = true
+                                    reason = "Aplikasi video/audio (YouTube PiP / Floating Video) terdeteksi aktif."
+                                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    val configs = audioManager?.activePlaybackConfigurations
+                                    if (!configs.isNullOrEmpty()) {
+                                        val hasActiveMedia = configs.any {
+                                            it.audioAttributes?.usage == AudioAttributes.USAGE_MEDIA ||
+                                            it.audioAttributes?.usage == AudioAttributes.USAGE_GAME
+                                        }
+                                        if (hasActiveMedia) {
+                                            hasOverlay = true
+                                            reason = "Aplikasi pemutar video/media terdeteksi aktif di layar."
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        }
+
+                        result.success(mapOf(
+                            "has_overlay" to hasOverlay,
+                            "reason" to reason
+                        ))
+                    } catch (e: Exception) {
+                        result.success(mapOf(
+                            "has_overlay" to false,
+                            "reason" to ""
+                        ))
+                    }
+                }
+
+                "resetOverlayTouchDetection" -> {
+                    hasDetectedObscuredTouch = false
+                    lastObscuredTouchTime = 0L
+                    hasAnotherActivityTakenTopResume = false
+                    lastTimeAnotherActivityTopResumed = 0L
+                    isMultiWindowDetected = false
+                    isPipDetected = false
+                    lastTimeNotTopResumed = 0L
+                    result.success(true)
+                }
+
                 "startLockTask" -> {
                     try {
                         startLockTask()
@@ -259,7 +554,17 @@ class MainActivity : FlutterActivity() {
                 "getBatteryLevel" -> {
                     try {
                         val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-                        val level = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+                        var level = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+                        // Fallback: use Intent sticky broadcast for devices that don't support BATTERY_PROPERTY_CAPACITY
+                        // (Sony Xperia, some Xiaomi MIUI, carrier-locked firmware, etc.)
+                        if (level < 0) {
+                            val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                            val rawLevel = intent?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                            val scale = intent?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+                            if (rawLevel >= 0 && scale > 0) {
+                                level = (rawLevel * 100 / scale)
+                            }
+                        }
                         result.success(level)
                     } catch (e: Exception) {
                         result.success(-1)
@@ -290,6 +595,18 @@ class MainActivity : FlutterActivity() {
 
                 "getDeviceId" -> {
                     result.success(getHardwareDeviceId())
+                }
+
+                "getAndroidVersion" -> {
+                    result.success(mapOf(
+                        "sdk_int" to Build.VERSION.SDK_INT,
+                        "release" to Build.VERSION.RELEASE
+                    ))
+                }
+
+                "wasRecentScreenshotKey" -> {
+                    val isRecent = (System.currentTimeMillis() - lastVolumeDownTime) < 1500L
+                    result.success(isRecent)
                 }
 
                 "openBrowserUrl" -> {
@@ -550,6 +867,14 @@ class MainActivity : FlutterActivity() {
                     result.success(openDeveloperSettings())
                 }
 
+                "openBluetoothSettings" -> {
+                    result.success(openBluetoothSettings())
+                }
+
+                "openOverlaySettings" -> {
+                    result.success(openOverlaySettings())
+                }
+
                 "verifyAppSignature" -> {
                     Thread {
                         val res = getAppSignatureHash()
@@ -583,6 +908,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun registerScreenshotCallback() {
+        // 1. Android 14+ ScreenCaptureCallback
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34 (Android 14)
             try {
                 val cb = android.app.Activity.ScreenCaptureCallback {
@@ -595,6 +921,34 @@ class MainActivity : FlutterActivity() {
                 // Unsupported on this device, silently ignore
             }
         }
+
+        // 2. MediaStore ContentObserver for Android <= 13 and universal detection
+        registerScreenshotObserver()
+    }
+
+    private fun registerScreenshotObserver() {
+        if (screenshotObserver != null) return
+        val handler = Handler(Looper.getMainLooper())
+        screenshotObserver = object : ContentObserver(handler) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                super.onChange(selfChange, uri)
+                checkScreenshotMediaStore(uri)
+            }
+        }
+        try {
+            contentResolver.registerContentObserver(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                true,
+                screenshotObserver!!
+            )
+        } catch (_: Exception) {}
+        try {
+            contentResolver.registerContentObserver(
+                MediaStore.Images.Media.INTERNAL_CONTENT_URI,
+                true,
+                screenshotObserver!!
+            )
+        } catch (_: Exception) {}
     }
 
     private fun unregisterScreenshotCallback() {
@@ -608,6 +962,60 @@ class MainActivity : FlutterActivity() {
                 // Ignore
             }
         }
+
+        screenshotObserver?.let {
+            try {
+                contentResolver.unregisterContentObserver(it)
+            } catch (_: Exception) {}
+            screenshotObserver = null
+        }
+    }
+
+    private fun checkScreenshotMediaStore(uri: Uri?) {
+        if (screenshotEventSink == null) return
+        val now = System.currentTimeMillis()
+        if (now - lastScreenshotTimestamp < 2000L) return
+
+        try {
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATA,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.DATE_ADDED
+            )
+            val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+            val queryUri = uri ?: MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+
+            contentResolver.query(
+                queryUri,
+                projection,
+                null,
+                null,
+                sortOrder
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val dateAddedIdx = cursor.getColumnIndex(MediaStore.Images.Media.DATE_ADDED)
+                    val dateAdded = if (dateAddedIdx >= 0) cursor.getLong(dateAddedIdx) else 0L
+                    val nowSec = now / 1000
+
+                    val dataIdx = cursor.getColumnIndex(MediaStore.Images.Media.DATA)
+                    val nameIdx = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
+                    val path = if (dataIdx >= 0) cursor.getString(dataIdx)?.lowercase(Locale.ROOT) ?: "" else ""
+                    val name = if (nameIdx >= 0) cursor.getString(nameIdx)?.lowercase(Locale.ROOT) ?: "" else ""
+
+                    val isScreenshot = path.contains("screenshot") || name.contains("screenshot") ||
+                            path.contains("tangkapan") || name.contains("tangkapan") ||
+                            path.contains("screencap") || name.contains("screencap")
+
+                    if (isScreenshot && (nowSec - dateAdded <= 15)) {
+                        lastScreenshotTimestamp = now
+                        runOnUiThread {
+                            screenshotEventSink?.success("screenshot_attempt")
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun scheduleExamAlarm(
@@ -677,12 +1085,19 @@ class MainActivity : FlutterActivity() {
 
     private fun isDeviceCharging(): Boolean {
         return try {
+            val ifilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            val batteryStatus: Intent? = registerReceiver(null, ifilter)
+            val plugged = batteryStatus?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+            val isPlugged = plugged == BatteryManager.BATTERY_PLUGGED_AC ||
+                    plugged == BatteryManager.BATTERY_PLUGGED_USB ||
+                    plugged == BatteryManager.BATTERY_PLUGGED_WIRELESS
+            if (isPlugged) return true
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val bm = getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
                 if (bm?.isCharging == true) return true
             }
-            val ifilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-            val batteryStatus: Intent? = registerReceiver(null, ifilter)
+
             val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
             status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
         } catch (e: Exception) {
@@ -894,21 +1309,77 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus && isKioskSystemBarsBlocked) {
-            collapseStatusBar()
-            enforceKioskSystemBars()
+    override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
+        if (event != null && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            lastVolumeDownTime = System.currentTimeMillis()
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        isActivityStopped = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        isActivityStopped = true
+    }
+
+    override fun onMultiWindowModeChanged(isInMultiWindowMode: Boolean, newConfig: Configuration?) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig)
+        if (isInMultiWindowMode) {
+            isMultiWindowDetected = true
         }
     }
 
-    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
-        if (isKioskSystemBarsBlocked && ev != null) {
-            val screenHeight = resources.displayMetrics.heightPixels
-            // Intercept swipe down from top edge (status bar) or up from bottom edge (gesture nav bar)
-            if (ev.rawY < 60 || ev.rawY > screenHeight - 70) {
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration?) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (isInPictureInPictureMode) {
+            isPipDetected = true
+        }
+    }
+
+    override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
+        super.onTopResumedActivityChanged(isTopResumedActivity)
+        if (!isTopResumedActivity) {
+            lastTimeNotTopResumed = System.currentTimeMillis()
+            if (!isActivityStopped) {
+                hasAnotherActivityTakenTopResume = true
+                lastTimeAnotherActivityTopResumed = System.currentTimeMillis()
+            }
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) {
+            if (isKioskSystemBarsBlocked) {
                 collapseStatusBar()
                 enforceKioskSystemBars()
+            }
+            // If focus lost within 1200ms of pressing Volume Down, it was triggered by hardware screenshot shortcut
+            if (System.currentTimeMillis() - lastVolumeDownTime < 1200L && screenshotEventSink != null) {
+                lastScreenshotTimestamp = System.currentTimeMillis()
+                screenshotEventSink?.success("screenshot_attempt")
+            }
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        if (ev != null) {
+            if ((ev.flags and MotionEvent.FLAG_WINDOW_IS_OBSCURED != 0) ||
+                (ev.flags and MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED != 0)) {
+                hasDetectedObscuredTouch = true
+                lastObscuredTouchTime = System.currentTimeMillis()
+            }
+            if (isKioskSystemBarsBlocked) {
+                val screenHeight = resources.displayMetrics.heightPixels
+                // Intercept swipe down from top edge (status bar) or up from bottom edge (gesture nav bar)
+                if (ev.rawY < 60 || ev.rawY > screenHeight - 70) {
+                    collapseStatusBar()
+                    enforceKioskSystemBars()
+                }
             }
         }
         return super.dispatchTouchEvent(ev)
@@ -1046,6 +1517,39 @@ class MainActivity : FlutterActivity() {
     private fun openDeveloperSettings(): Boolean {
         return try {
             val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+            true
+        } catch (_: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                startActivity(intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    private fun openBluetoothSettings(): Boolean {
+        return try {
+            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun openOverlaySettings(): Boolean {
+        return try {
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
+            } else {
+                Intent(Settings.ACTION_SETTINGS)
+            }
             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
             startActivity(intent)
             true

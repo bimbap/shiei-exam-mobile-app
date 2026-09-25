@@ -104,7 +104,17 @@ class _LockedScreenState extends State<LockedScreen> {
   Future<void> _silentCheckUnlock() async {
     if (_examId == null) return;
     try {
-      final res = await _api.get(ApiEndpoints.progressByExam(_examId!));
+      final devCharging = await VolumeLockService.isDeviceCharging();
+      final bat = await VolumeLockService.getBatteryLevel();
+      final net = await VolumeLockService.getNetworkType();
+      final res = await _api.get(
+        ApiEndpoints.progressByExam(_examId!),
+        queryParameters: {
+          'is_charging': devCharging ? 1 : 0,
+          'battery_level': bat,
+          'network_type': net,
+        },
+      );
       final progress = res.data['data'];
       if (progress == null) return;
 
@@ -132,7 +142,17 @@ class _LockedScreenState extends State<LockedScreen> {
     setState(() => _isChecking = true);
 
     try {
-      final res = await _api.get(ApiEndpoints.progressByExam(_examId!));
+      final devCharging = await VolumeLockService.isDeviceCharging();
+      final bat = await VolumeLockService.getBatteryLevel();
+      final net = await VolumeLockService.getNetworkType();
+      final res = await _api.get(
+        ApiEndpoints.progressByExam(_examId!),
+        queryParameters: {
+          'is_charging': devCharging ? 1 : 0,
+          'battery_level': bat,
+          'network_type': net,
+        },
+      );
       setState(() => _isChecking = false);
 
       final progress = res.data['data'];

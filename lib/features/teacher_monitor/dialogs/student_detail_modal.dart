@@ -108,7 +108,28 @@ class StudentDetailModal {
         effectiveDefaultClass;
     final deviceName = user['device_name']?.toString() ?? user['device_id']?.toString() ?? user['serial_number']?.toString();
     final serial = user['serial_number']?.toString();
+    final androidVersion = user['android_version']?.toString();
     final bool hasBoundDevice = (deviceName != null && deviceName.isNotEmpty) || (serial != null && serial.isNotEmpty);
+    final rawBattery = item['battery_level'] ?? (item['metadata'] is Map ? item['metadata']['battery_level'] : null);
+    final int? batteryLevel = rawBattery is int
+        ? rawBattery
+        : int.tryParse(rawBattery?.toString() ?? '');
+    final dynamic rawCharging = item['is_charging'] ?? (item['metadata'] is Map ? item['metadata']['is_charging'] : null);
+    final bool isCharging = rawCharging == true ||
+        rawCharging == 1 ||
+        rawCharging == '1' ||
+        rawCharging?.toString().toLowerCase() == 'true';
+    final String networkType = (item['network_type'] ?? (item['metadata'] is Map ? item['metadata']['network_type'] : null))?.toString().toLowerCase() ?? '';
+    final bool isWifi = networkType == 'wifi';
+    final bool isCellular = networkType == 'cellular' || networkType == 'seluler' || networkType == 'mobile';
+    final String networkLabel = isWifi
+        ? 'Wi-Fi'
+        : isCellular
+            ? 'Data Seluler'
+            : (networkType.isNotEmpty ? networkType.toUpperCase() : 'Tidak Terdeteksi');
+
+    final dynamic rawCall = item['is_on_call'] ?? (item['metadata'] is Map ? item['metadata']['is_on_call'] : null);
+    final bool isOnCall = rawCall == true || rawCall == 1 || rawCall == '1' || rawCall?.toString().toLowerCase() == 'true';
     final extraMins = item['extra_minutes'] is int ? item['extra_minutes'] as int : int.tryParse(item['extra_minutes']?.toString() ?? '') ?? 0;
     final score = item['score'];
 
@@ -466,7 +487,6 @@ class StudentDetailModal {
                     buildCompactRow(
                       icon: Icons.phone_android_rounded,
                       label: 'Perangkat Ujian',
-                      showDivider: false,
                       isDark: isDark,
                       valueWidget: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -490,8 +510,126 @@ class StudentDetailModal {
                         ],
                       ),
                     ),
+                    if (androidVersion != null && androidVersion.isNotEmpty)
+                      buildCompactRow(
+                        icon: Icons.android_rounded,
+                        label: 'Versi OS',
+                        isDark: isDark,
+                        valueWidget: Text(
+                          androidVersion,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                    buildCompactRow(
+                      icon: isCharging
+                          ? Icons.battery_charging_full_rounded
+                          : batteryLevel != null && batteryLevel <= 20
+                              ? Icons.battery_alert_rounded
+                              : Icons.battery_full_rounded,
+                      label: 'Baterai HP',
+                      isDark: isDark,
+                      valueWidget: batteryLevel != null
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isCharging
+                                    ? const Color(0xFF3B82F6).withValues(alpha: 0.12)
+                                    : batteryLevel <= 20
+                                        ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                                        : batteryLevel <= 50
+                                            ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+                                            : const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '$batteryLevel%${isCharging ? ' ⚡' : ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isCharging
+                                      ? const Color(0xFF3B82F6)
+                                      : batteryLevel <= 20
+                                          ? const Color(0xFFEF4444)
+                                          : batteryLevel <= 50
+                                              ? const Color(0xFFF59E0B)
+                                              : const Color(0xFF10B981),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              'Tidak terbaca',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                    ),
+                    buildCompactRow(
+                      icon: isWifi
+                          ? Icons.wifi_rounded
+                          : isCellular
+                              ? Icons.signal_cellular_alt_rounded
+                              : Icons.wifi_off_rounded,
+                      label: 'Jaringan Internet',
+                      isDark: isDark,
+                      valueWidget: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isWifi
+                              ? const Color(0xFF3B82F6).withValues(alpha: 0.12)
+                              : isCellular
+                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+                                  : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          networkLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isWifi
+                                ? const Color(0xFF3B82F6)
+                                : isCellular
+                                    ? const Color(0xFF8B5CF6)
+                                    : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    buildCompactRow(
+                      icon: isOnCall ? Icons.phone_in_talk_rounded : Icons.phone_disabled_rounded,
+                      label: 'Status Panggilan',
+                      showDivider: false,
+                      isDark: isDark,
+                      valueWidget: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isOnCall
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                              : const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: isOnCall
+                              ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 0.8)
+                              : null,
+                        ),
+                        child: Text(
+                          isOnCall ? 'SEDANG TELPONAN ⚠️' : 'Tidak Ada',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: isOnCall ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
+
                 const SizedBox(height: 14),
 
                 // Section 3: Informasi Status Audit & Akses Sesi
@@ -508,6 +646,7 @@ class StudentDetailModal {
                         isKicked: isKicked,
                         isExamEnded: isExamEnded,
                         isLocked: isLocked,
+                        isWaiting: status == 'pending' || wasUnlocked,
                         isDark: isDark,
                       ),
                     ),
@@ -634,7 +773,6 @@ class StudentDetailModal {
                     buildCompactRow(
                       icon: Icons.phone_android_rounded,
                       label: 'Perangkat Ujian',
-                      showDivider: false,
                       isDark: isDark,
                       valueWidget: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -658,9 +796,127 @@ class StudentDetailModal {
                         ],
                       ),
                     ),
+                    if (androidVersion != null && androidVersion.isNotEmpty)
+                      buildCompactRow(
+                        icon: Icons.android_rounded,
+                        label: 'Versi OS',
+                        isDark: isDark,
+                        valueWidget: Text(
+                          androidVersion,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                          ),
+                        ),
+                      ),
+                    buildCompactRow(
+                      icon: isCharging
+                          ? Icons.battery_charging_full_rounded
+                          : batteryLevel != null && batteryLevel <= 20
+                              ? Icons.battery_alert_rounded
+                              : Icons.battery_full_rounded,
+                      label: 'Baterai HP',
+                      isDark: isDark,
+                      valueWidget: batteryLevel != null
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isCharging
+                                    ? const Color(0xFF3B82F6).withValues(alpha: 0.12)
+                                    : batteryLevel <= 20
+                                        ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                                        : batteryLevel <= 50
+                                            ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+                                            : const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '$batteryLevel%${isCharging ? ' ⚡' : ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isCharging
+                                      ? const Color(0xFF3B82F6)
+                                      : batteryLevel <= 20
+                                          ? const Color(0xFFEF4444)
+                                          : batteryLevel <= 50
+                                              ? const Color(0xFFF59E0B)
+                                              : const Color(0xFF10B981),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              'Tidak terbaca',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? const Color(0xFF475569) : const Color(0xFF94A3B8),
+                              ),
+                            ),
+                    ),
+                    buildCompactRow(
+                      icon: isWifi
+                          ? Icons.wifi_rounded
+                          : isCellular
+                              ? Icons.signal_cellular_alt_rounded
+                              : Icons.wifi_off_rounded,
+                      label: 'Jaringan Internet',
+                      isDark: isDark,
+                      valueWidget: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isWifi
+                              ? const Color(0xFF3B82F6).withValues(alpha: 0.12)
+                              : isCellular
+                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+                                  : (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          networkLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isWifi
+                                ? const Color(0xFF3B82F6)
+                                : isCellular
+                                    ? const Color(0xFF8B5CF6)
+                                    : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    buildCompactRow(
+                      icon: isOnCall ? Icons.phone_in_talk_rounded : Icons.phone_disabled_rounded,
+                      label: 'Status Panggilan',
+                      showDivider: false,
+                      isDark: isDark,
+                      valueWidget: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isOnCall
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                              : const Color(0xFF10B981).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: isOnCall
+                              ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 0.8)
+                              : null,
+                        ),
+                        child: Text(
+                          isOnCall ? 'SEDANG TELPONAN ⚠️' : 'Tidak Ada',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: isOnCall ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
+
 
                 // Section 2: Informasi Sesi Ujian & Hasil Evaluasi
                 buildCompactSection(
@@ -681,7 +937,9 @@ class StudentDetailModal {
                                     ? 'DIKELUARKAN'
                                     : isExpired
                                         ? 'WAKTU HABIS'
-                                        : 'SEDANG MENGERJAKAN',
+                                        : status == 'pending'
+                                            ? 'MENUNGGU SISWA'
+                                            : 'SEDANG UJIAN',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -693,7 +951,9 @@ class StudentDetailModal {
                                       ? const Color(0xFFBE123C)
                                       : isExpired
                                           ? const Color(0xFF64748B)
-                                          : const Color(0xFF3B82F6),
+                                          : status == 'pending'
+                                              ? const Color(0xFFF59E0B)
+                                              : const Color(0xFF10B981),
                         ),
                       ),
                     ),
@@ -735,11 +995,17 @@ class StudentDetailModal {
                             ? 'SESI BERAKHIR'
                             : isLocked
                                 ? 'TERBLOKIR'
-                                : 'DIIZINKAN',
+                                : (status == 'pending' || wasUnlocked)
+                                    ? 'MENUNGGU SISWA'
+                                    : 'DIIZINKAN',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: (isExamEnded || isLocked) ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                          color: (isExamEnded || isLocked)
+                              ? const Color(0xFFEF4444)
+                              : (status == 'pending' || wasUnlocked)
+                                  ? const Color(0xFFF59E0B)
+                                  : const Color(0xFF10B981),
                         ),
                       ),
                     ),
@@ -828,6 +1094,7 @@ class StudentDetailModal {
                           violationReason: lockReason,
                           examTitle: effectiveExamTitle,
                           deviceName: deviceName,
+                          timestamp: incidentTimeFormatted != 'Terekam saat sesi aktif' ? incidentTimeFormatted : null,
                         );
 
                         if (confirmed && context.mounted) {
@@ -1188,6 +1455,7 @@ class StudentDetailModal {
     required bool isKicked,
     required bool isExamEnded,
     required bool isLocked,
+    bool isWaiting = false,
     required bool isDark,
   }) {
     final String label;
@@ -1212,6 +1480,10 @@ class StudentDetailModal {
       label = 'Terkunci';
       icon = Icons.lock_rounded;
       color = const Color(0xFFEF4444);
+    } else if (isWaiting) {
+      label = 'Menunggu Siswa';
+      icon = Icons.hourglass_top_rounded;
+      color = const Color(0xFFF59E0B);
     } else {
       label = 'Akses Terbuka';
       icon = Icons.lock_open_rounded;

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import '../theme/app_theme.dart';
 
 class FluidNavItem {
@@ -117,17 +118,14 @@ class _FluidCurvedBottomBarState extends State<FluidCurvedBottomBar>
                     final double notchCenterX =
                         horizontalPadding + (currentPos + 0.5) * itemWidth;
 
-                    return SizedBox(
-                      height: barHeight + 14, // Extra top space for elevated bubble
-                      child: Stack(
+                    return _OverflowHitTest(
+                      child: SizedBox(
+                        height: barHeight,
+                        child: Stack(
                         clipBehavior: Clip.none,
                         children: [
                           // 1. Custom Painted Bar Body with Curved Notch
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            height: barHeight,
+                          Positioned.fill(
                             child: CustomPaint(
                               painter: _FluidNotchPainter(
                                 notchCenterX: notchCenterX,
@@ -142,11 +140,9 @@ class _FluidCurvedBottomBarState extends State<FluidCurvedBottomBar>
                           ),
 
                           // 2. Clickable Navigation Tabs (Row)
-                          Positioned(
+                          Positioned.fill(
                             left: horizontalPadding,
                             right: horizontalPadding,
-                            bottom: 0,
-                            height: barHeight,
                             child: Row(
                               children: List.generate(widget.items.length, (index) {
                                 final item = widget.items[index];
@@ -202,7 +198,7 @@ class _FluidCurvedBottomBarState extends State<FluidCurvedBottomBar>
                           // 3. Elevated Floating Pill / Bubble
                           Positioned(
                             left: notchCenterX - (bubbleSize / 2),
-                            top: 0,
+                            top: -14, // Elevated above the bar body by 14px
                             child: GestureDetector(
                               onTap: () => widget.onTap(widget.currentIndex),
                               child: Container(
@@ -278,7 +274,8 @@ class _FluidCurvedBottomBarState extends State<FluidCurvedBottomBar>
                           ),
                         ],
                       ),
-                    );
+                    ),
+                  );
                   },
                 );
               },
@@ -423,3 +420,23 @@ class _FluidNotchPainter extends CustomPainter {
         oldDelegate.borderColor != borderColor;
   }
 }
+
+/// Allows hit-testing on children that overflow their parent bounds (such as the elevated floating bubble).
+class _OverflowHitTest extends SingleChildRenderObjectWidget {
+  const _OverflowHitTest({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderOverflowHitTest();
+}
+
+class _RenderOverflowHitTest extends RenderProxyBox {
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (hitTestChildren(result, position: position)) {
+      result.add(BoxHitTestEntry(this, position));
+      return true;
+    }
+    return super.hitTest(result, position: position);
+  }
+}
+

@@ -7,6 +7,7 @@ import '../../main.dart' show appNavigatorKey;
 import '../../shared/widgets/app_notification.dart';
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
+import '../auth/token_storage.dart';
 import 'alarm_player_service.dart';
 import 'cheat_reporter.dart';
 import 'volume_lock_service.dart';
@@ -76,9 +77,14 @@ class LockdownService with WidgetsBindingObserver {
     _screenshotSubscription?.cancel();
     _screenshotSubscription = _screenshotEventChannel
         .receiveBroadcastStream()
-        .listen((event) {
+        .listen((event) async {
       if (!_isLockdownActive || _isHandlingViolation) return;
       if (event == 'screenshot_attempt') {
+        final isProtected = await TokenStorage.isScreenshotProtectionEnabled();
+        if (!isProtected) {
+          debugPrint('[LockdownService] Screenshot attempt detected, but bypassed in debug mode.');
+          return;
+        }
         handleViolation(
           eventType: 'screenshot_attempt',
           details: 'Tangkapan layar berhasil diambil saat ujian berlangsung.',
@@ -98,12 +104,8 @@ class LockdownService with WidgetsBindingObserver {
       ).then((_) => null, onError: (_) => null);
     }
 
-    if (_isCharging && _activeExamId != null) {
-      _api.post(
-        ApiEndpoints.chargingStatus,
-        data: {'link_id': _activeExamId, 'is_charging': false},
-      ).then((_) => null, onError: (_) => null);
-    }
+    // Do NOT falsely notify backend that charging stopped when device might still be physically plugged in!
+    // The device hardware status poller handles notifying when the cable is physically detached.
 
     _isLockdownActive = false;
     _activeExamId = null;
@@ -135,30 +137,27 @@ class LockdownService with WidgetsBindingObserver {
 
   /**
    * Monitor active phone call state during exam session.
-   * Integrity Requirement: Active phone calls or VoIP calls during exams are strictly forbidden.
-   * Detects call state and immediately triggers an anti-cheat violation sequence.
+   * Business Logic Requirement: Phone calls during exams are permitted without lockout penalty,
+   * but the active call state is automatically and immediately reported to proctors on panel & app.
    */
   Future<void> checkPhoneCallState() async {
-    if (!_isLockdownActive || _activeExamId == null || _isHandlingViolation) return;
+    if (!_isLockdownActive || _activeExamId == null) return;
 
     final isCall = await VolumeLockService.isPhoneCallActive();
-    if (isCall) {
-      _isOnPhoneCall = true;
-      debugPrint('[LockdownService] Voice Call: Active phone call detected during exam session!');
+    if (isCall != _isOnPhoneCall) {
+      _isOnPhoneCall = isCall;
+      debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
       try {
         await _api.post(
           ApiEndpoints.phoneCallStatus,
           data: {
             'link_id': _activeExamId,
-            'is_on_call': true,
+            'is_on_call': isCall,
           },
         );
-      } catch (_) {}
-
-      await handleViolation(
-        eventType: 'phone_call_detected',
-        details: 'Pelanggaran Integritas: Panggilan suara / telepon terdeteksi aktif saat ujian berlangsung.',
-      );
+      } catch (e) {
+        debugPrint('[LockdownService] Error updating phone call status: $e');
+      }
     }
   }
 
@@ -192,29 +191,105 @@ class LockdownService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (!_isLockdownActive || _activeExamId == null || _isHandlingViolation) return;
 
-    // Check if app lost focus or changed state due to an incoming or active phone call
-    // Integrity Requirement: Phone calls are prohibited during exam!
+    // Check if app changed state due to an incoming or active phone call (WhatsApp, Discord, Cellular)
+    // Business Requirement: Phone call during exam does NOT lock the exam, but auto-reports to panel & app!
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
     if (isPhoneCall) {
-      debugPrint('[LockdownService] Voice Call: Phone call interruption detected during exam session!');
-      await handleViolation(
-        eventType: 'phone_call_detected',
-        details: 'Pelanggaran Integritas: Panggilan suara / telepon terdeteksi aktif saat sesi ujian berlangsung.',
-      );
-      return;
+      if (!_isOnPhoneCall) {
+        _isOnPhoneCall = true;
+        try {
+          await _api.post(
+            ApiEndpoints.phoneCallStatus,
+            data: {
+              'link_id': _activeExamId,
+              'is_on_call': true,
+            },
+          );
+        } catch (_) {}
+      }
+      debugPrint('[LockdownService] Voice call active during lifecycle change. Bypassing lockout ejection.');
+      return; // Do NOT trigger app_minimize or overlay_detected
     }
 
     if (state == AppLifecycleState.paused) {
+      // Allow brief 250ms debounce window for VoIP audio pipeline (WhatsApp, Telegram, Discord)
+      // to bind audio focus when full-screen incoming call activity launches
+      await Future.delayed(const Duration(milliseconds: 250));
+      if (!_isLockdownActive || _isHandlingViolation) return;
+
+      final isPhoneCallOnPause = await VolumeLockService.isPhoneCallActive();
+      if (isPhoneCallOnPause) {
+        if (!_isOnPhoneCall) {
+          _isOnPhoneCall = true;
+          try {
+            await _api.post(
+              ApiEndpoints.phoneCallStatus,
+              data: {
+                'link_id': _activeExamId,
+                'is_on_call': true,
+              },
+            );
+          } catch (_) {}
+        }
+        debugPrint('[LockdownService] Voice call active on pause. Bypassing app_minimize.');
+        return; // Do NOT trigger app_minimize
+      }
+
+      final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+      if (isExitBypass) {
+        debugPrint('[LockdownService] App minimize / pause bypassed in debug mode.');
+        return;
+      }
       // User minimized the app or switched tasks
       handleViolation(
         eventType: 'app_minimize',
         details: 'Aplikasi diminimalkan atau siswa mencoba keluar ke menu utama.',
       );
     } else if (state == AppLifecycleState.inactive) {
-      // Debounce: plugging in a charger or transient system battery HUD can trigger a brief inactive state.
-      // If lifecycle returns to resumed quickly, it is a benign transient system HUD, not a cheating overlay.
-      await Future.delayed(const Duration(milliseconds: 350));
+      // Debounce: plugging in a charger, transient system battery HUD, or screenshot preview
+      // can trigger a brief inactive state.
+      await Future.delayed(const Duration(milliseconds: 650));
       if (!_isLockdownActive || WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        return;
+      }
+
+      // Check if focus loss was triggered by an incoming phone call / VoIP call heads-up banner
+      final isCallNow = await VolumeLockService.isPhoneCallActive();
+      if (isCallNow) {
+        if (!_isOnPhoneCall) {
+          _isOnPhoneCall = true;
+          try {
+            await _api.post(
+              ApiEndpoints.phoneCallStatus,
+              data: {
+                'link_id': _activeExamId,
+                'is_on_call': true,
+              },
+            );
+          } catch (_) {}
+        }
+        debugPrint('[LockdownService] Voice call banner active during inactive state. Bypassing overlay.');
+        return; // Do NOT trigger overlay_detected
+      }
+
+      // Check if focus loss was triggered by hardware screenshot shortcut (Power + Volume Down)
+      final wasScreenshot = await VolumeLockService.wasRecentScreenshotKey();
+      if (wasScreenshot) {
+        final isProtected = await TokenStorage.isScreenshotProtectionEnabled();
+        if (!isProtected) {
+          debugPrint('[LockdownService] Screenshot key combo detected, but bypassed in debug mode.');
+          return;
+        }
+        handleViolation(
+          eventType: 'screenshot_attempt',
+          details: 'Percobaan tangkapan layar (kombinasi tombol hardware screenshot) terdeteksi.',
+        );
+        return;
+      }
+
+      final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+      if (isExitBypass) {
+        debugPrint('[LockdownService] Overlay / inactive state bypassed in debug mode.');
         return;
       }
 
@@ -232,11 +307,45 @@ class LockdownService with WidgetsBindingObserver {
   Future<void> checkSplitScreen() async {
     if (!_isLockdownActive || _activeExamId == null) return;
 
+    final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+    if (isExitBypass) return;
+
     final inMulti = await VolumeLockService.isMultiWindow();
     if (inMulti) {
       await handleViolation(
         eventType: 'split_screen',
-        details: 'Android multi-window split screen detected',
+        details: 'Mode layar terbagi (Split Screen / Multi-Window) terdeteksi aktif saat ujian berlangsung.',
+      );
+    }
+  }
+
+  /**
+   * Check whether any floating window, Picture-in-Picture, or overlay is active during exam.
+   */
+  Future<void> checkOverlay() async {
+    if (!_isLockdownActive || _activeExamId == null || _isHandlingViolation) return;
+
+    final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+    if (isExitBypass) return;
+
+    // Check if phone or VoIP call is active first so call heads-up HUD is never misclassified as overlay
+    final isCall = await VolumeLockService.isPhoneCallActive();
+    if (isCall) {
+      await checkPhoneCallState();
+      return;
+    }
+
+    final overlayResult = await VolumeLockService.detectFloatingWindowOrOverlay();
+    if (overlayResult['is_call_active'] == true) {
+      await checkPhoneCallState();
+      return;
+    }
+
+    if (overlayResult['has_overlay'] == true) {
+      final reason = overlayResult['reason']?.toString() ?? 'Jendela mengambang atau overlay terdeteksi aktif.';
+      await handleViolation(
+        eventType: 'overlay_detected',
+        details: 'Aplikasi mengambang terdeteksi aktif: $reason',
       );
     }
   }

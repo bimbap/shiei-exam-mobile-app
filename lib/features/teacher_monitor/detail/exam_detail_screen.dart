@@ -768,7 +768,8 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
     bool canManage = true,
   }) {
     final completedCount = students.where((s) => s['status'] == 'completed' || s['status'] == 'submitted' || (s['score'] != null)).length;
-    final inProgressCount = students.where((s) => !isExamEnded && (s['status'] == 'in_progress' || s['status'] == 'pending' || s['status'] == 'started') && s['is_locked'] != true && s['status'] != 'terminated').length;
+    final pendingCount = students.where((s) => !isExamEnded && s['status'] == 'pending' && s['is_locked'] != true && s['status'] != 'terminated').length;
+    final inProgressCount = students.where((s) => !isExamEnded && (s['status'] == 'in_progress' || s['status'] == 'started') && s['is_locked'] != true && s['status'] != 'terminated').length;
     final bool hasToken = token.isNotEmpty && token != '-';
 
     return Container(
@@ -1086,13 +1087,19 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
           Row(
             children: [
               Expanded(child: _buildStatPill('Total: ${students.length}', const Color(0xFF0284C7), isDark)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: isExamEnded
                     ? _buildStatPill('Selesai: $completedCount', const Color(0xFF10B981), isDark)
                     : _buildStatPill('Aktif: $inProgressCount', const Color(0xFF10B981), isDark),
               ),
-              const SizedBox(width: 8),
+              if (!isExamEnded && pendingCount > 0) ...[
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildStatPill('Menunggu: $pendingCount', const Color(0xFFF59E0B), isDark),
+                ),
+              ],
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildStatPill('Terkunci: $lockedCount', lockedCount > 0 ? const Color(0xFFEF4444) : const Color(0xFF64748B), isDark),
               ),
@@ -1123,7 +1130,9 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
 
     final completedCount = students.where((s) => s['status'] == 'completed' || s['status'] == 'submitted' || (s['score'] != null)).length;
     final lockedCount = students.where((s) => s['is_locked'] == true || s['status'] == 'locked' || s['status'] == 'split_screen').length;
-    final inProgressCount = students.where((s) => !isExamEnded && (s['status'] == 'in_progress' || s['status'] == 'pending' || s['status'] == 'started') && s['is_locked'] != true && s['status'] != 'terminated').length;
+    final pendingCount = students.where((s) => !isExamEnded && s['status'] == 'pending' && s['is_locked'] != true && s['status'] != 'terminated').length;
+    final onCallCount = students.where((s) => s['is_on_call'] == true || s['is_on_call'] == 1 || s['is_on_call']?.toString() == 'true').length;
+    final inProgressCount = students.where((s) => !isExamEnded && (s['status'] == 'in_progress' || s['status'] == 'started') && s['is_locked'] != true && s['status'] != 'terminated').length;
 
     final filteredStudents = students.where((item) {
       final user = item['user'] as Map<String, dynamic>? ?? {};
@@ -1140,11 +1149,17 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
       final status = item['status']?.toString().toLowerCase() ?? 'pending';
       final isLocked = item['is_locked'] == true || status == 'locked' || status == 'split_screen';
       final isCompleted = status == 'completed' || status == 'submitted' || item['score'] != null;
-      final isInProgress = !isExamEnded && !isLocked && !isCompleted;
+      final isPending = !isExamEnded && !isLocked && !isCompleted && status == 'pending';
+      final isInProgress = !isExamEnded && !isLocked && !isCompleted && (status == 'in_progress' || status == 'started');
+      final isOnCall = item['is_on_call'] == true || item['is_on_call'] == 1 || item['is_on_call']?.toString() == 'true';
 
       switch (_participantFilter) {
         case 'in_progress':
           return isInProgress;
+        case 'pending':
+          return isPending;
+        case 'on_call':
+          return isOnCall;
         case 'completed':
           return isCompleted;
         case 'locked':
@@ -1220,6 +1235,14 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                           _buildFilterChip('Semua (${students.length})', 'all', isDark),
                           const SizedBox(width: 8),
                           _buildFilterChip('Mengerjakan ($inProgressCount)', 'in_progress', isDark),
+                          if (pendingCount > 0) ...[
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Menunggu ($pendingCount)', 'pending', isDark),
+                          ],
+                          if (onCallCount > 0) ...[
+                            const SizedBox(width: 8),
+                            _buildFilterChip('Telponan ($onCallCount)', 'on_call', isDark, isAlert: true),
+                          ],
                           const SizedBox(width: 8),
                           _buildFilterChip('Selesai ($completedCount)', 'completed', isDark),
                           const SizedBox(width: 8),
@@ -1401,6 +1424,25 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
     final bool hasBoundDevice = (deviceName != null && deviceName.isNotEmpty) || (serial != null && serial.isNotEmpty);
     final extraMins = item['extra_minutes'] is int ? item['extra_minutes'] as int : int.tryParse(item['extra_minutes']?.toString() ?? '') ?? 0;
     final score = item['score'];
+    final rawBattery = item['battery_level'] ?? (item['metadata'] is Map ? item['metadata']['battery_level'] : null);
+    final int? batteryLevel = rawBattery is int
+        ? rawBattery
+        : int.tryParse(rawBattery?.toString() ?? '');
+    final dynamic rawCharging = item['is_charging'] ?? (item['metadata'] is Map ? item['metadata']['is_charging'] : null);
+    final bool isCharging = rawCharging == true ||
+        rawCharging == 1 ||
+        rawCharging == '1' ||
+        rawCharging?.toString().toLowerCase() == 'true';
+    final rawOnline = item['is_online'];
+    final rawSecondsSince = item['seconds_since_heartbeat'];
+    final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+    final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+    final String? networkType = item['network_type']?.toString() ?? (item['metadata'] is Map ? item['metadata']['network_type']?.toString() : null);
+    final dynamic rawOnCall = item['is_on_call'] ?? (item['metadata'] is Map ? item['metadata']['is_on_call'] : null);
+    final bool isOnCall = rawOnCall == true ||
+        rawOnCall == 1 ||
+        rawOnCall == '1' ||
+        rawOnCall?.toString().toLowerCase() == 'true';
 
     Color cardBorderColor;
     Color avatarBg;
@@ -1442,12 +1484,28 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
       statusLabel = 'WAKTU HABIS';
       statusBadgeBg = const Color(0xFF64748B).withValues(alpha: 0.12);
       statusBadgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    } else if (isLost) {
+      cardBorderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+      avatarBg = const Color(0xFF64748B).withValues(alpha: 0.12);
+      iconColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+      statusIcon = Icons.wifi_off_rounded;
+      statusLabel = 'TERPUTUS';
+      statusBadgeBg = const Color(0xFF64748B).withValues(alpha: 0.12);
+      statusBadgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    } else if (status == 'pending') {
+      cardBorderColor = const Color(0xFFF59E0B).withValues(alpha: 0.35);
+      avatarBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      iconColor = const Color(0xFFF59E0B);
+      statusIcon = Icons.hourglass_top_rounded;
+      statusLabel = 'MENUNGGU SISWA';
+      statusBadgeBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      statusBadgeTextColor = const Color(0xFFD97706);
     } else {
       cardBorderColor = const Color(0xFF10B981).withValues(alpha: 0.35);
       avatarBg = const Color(0xFF10B981).withValues(alpha: 0.12);
       iconColor = const Color(0xFF10B981);
       statusIcon = Icons.sensors_rounded;
-      statusLabel = 'MENGERJAKAN';
+      statusLabel = 'SEDANG UJIAN';
       statusBadgeBg = const Color(0xFF10B981).withValues(alpha: 0.12);
       statusBadgeTextColor = const Color(0xFF10B981);
     }
@@ -1557,6 +1615,147 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                                   ],
                                 ),
                               ),
+                              if ((batteryLevel != null && batteryLevel >= 0) || isCharging) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isLost
+                                        ? (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9))
+                                        : isCharging
+                                            ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                            : (batteryLevel != null && batteryLevel <= 15)
+                                                ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                                : const Color(0xFF10B981).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: isLost
+                                          ? (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))
+                                          : isCharging
+                                              ? const Color(0xFFF59E0B).withValues(alpha: 0.4)
+                                              : (batteryLevel != null && batteryLevel <= 15)
+                                                  ? const Color(0xFFEF4444).withValues(alpha: 0.4)
+                                                  : const Color(0xFF10B981).withValues(alpha: 0.4),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        isLost
+                                            ? Icons.battery_std_rounded
+                                            : isCharging
+                                                ? Icons.bolt_rounded
+                                                : (batteryLevel != null && batteryLevel <= 15)
+                                                    ? Icons.battery_alert_rounded
+                                                    : Icons.battery_std_rounded,
+                                        size: 11,
+                                        color: isLost
+                                            ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                            : isCharging
+                                                ? const Color(0xFFD97706)
+                                                : (batteryLevel != null && batteryLevel <= 15)
+                                                    ? const Color(0xFFEF4444)
+                                                    : const Color(0xFF10B981),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        isCharging && (batteryLevel == null || batteryLevel < 0)
+                                            ? 'CAS'
+                                            : '$batteryLevel%${isCharging && !isLost ? ' CAS' : ''}',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isLost
+                                              ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                              : isCharging
+                                                  ? const Color(0xFFD97706)
+                                                  : (batteryLevel != null && batteryLevel <= 15)
+                                                      ? const Color(0xFFEF4444)
+                                                      : const Color(0xFF10B981),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (networkType != null && networkType.isNotEmpty) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: isLost
+                                        ? (isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9))
+                                        : const Color(0xFF10B981).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: isLost
+                                          ? (isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1))
+                                          : const Color(0xFF10B981).withValues(alpha: 0.4),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        networkType.toLowerCase().contains('wifi')
+                                            ? Icons.wifi_rounded
+                                            : Icons.signal_cellular_alt_rounded,
+                                        size: 11,
+                                        color: isLost
+                                            ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                            : const Color(0xFF10B981),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        networkType.toLowerCase().contains('wifi') ? 'Wi-Fi' : 'Seluler',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: isLost
+                                              ? (isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                              : const Color(0xFF10B981),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (isOnCall) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFFEF4444).withValues(alpha: 0.5),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.phone_in_talk_rounded,
+                                        size: 11,
+                                        color: Color(0xFFEF4444),
+                                      ),
+                                      SizedBox(width: 2.5),
+                                      Text(
+                                        'SEDANG TELPONAN',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.chevron_right_rounded,

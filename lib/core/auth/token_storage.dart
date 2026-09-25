@@ -56,6 +56,7 @@ class TokenStorage {
   }
 
   static const String _keyScreenshotProtection = 'screenshot_protection_enabled';
+  static const String _keyAppExitBypass = 'app_exit_bypass_enabled';
 
   static Future<void> setScreenshotProtection(bool enabled) async {
     await _storage.write(key: _keyScreenshotProtection, value: enabled ? '1' : '0');
@@ -67,6 +68,16 @@ class TokenStorage {
     if (!kDebugMode) return true;
     final val = await _storage.read(key: _keyScreenshotProtection);
     if (val == null) return true; // Default active (protected)
+    return val == '1';
+  }
+
+  static Future<void> setAppExitBypass(bool enabled) async {
+    await _storage.write(key: _keyAppExitBypass, value: enabled ? '1' : '0');
+  }
+
+  static Future<bool> isAppExitBypassEnabled() async {
+    if (!kDebugMode) return false;
+    final val = await _storage.read(key: _keyAppExitBypass);
     return val == '1';
   }
 

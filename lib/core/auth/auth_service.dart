@@ -18,10 +18,17 @@ class AuthService {
     String deviceName = '';
     String deviceId = '';
     String serialNumber = '';
+    String androidVersion = '';
 
     try {
       deviceName = await VolumeLockService.getDeviceName();
       deviceId = await VolumeLockService.getDeviceId();
+      final versionInfo = await VolumeLockService.getAndroidVersion();
+      final release = versionInfo['release']?.toString() ?? '';
+      final sdk = versionInfo['sdk_int']?.toString() ?? '';
+      if (release.isNotEmpty) {
+        androidVersion = sdk.isNotEmpty ? 'Android $release (API $sdk)' : 'Android $release';
+      }
     } catch (_) {}
 
     try {
@@ -34,11 +41,15 @@ class AuthService {
           final brand = androidInfo.brand.isNotEmpty ? androidInfo.brand : androidInfo.manufacturer;
           deviceName = '$brand ${androidInfo.model}'.trim();
         }
+        if (androidVersion.isEmpty) {
+          androidVersion = 'Android ${androidInfo.version.release} (API ${androidInfo.version.sdkInt})';
+        }
         serialNumber = androidInfo.id.isNotEmpty ? androidInfo.id : androidInfo.fingerprint;
       } else if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
         if (deviceName.isEmpty) deviceName = iosInfo.name.isNotEmpty ? iosInfo.name : 'iPhone / iPad';
         if (deviceId.isEmpty) deviceId = iosInfo.utsname.machine.isNotEmpty ? iosInfo.utsname.machine : 'iOS';
+        if (androidVersion.isEmpty) androidVersion = 'iOS ${iosInfo.systemVersion}';
         serialNumber = iosInfo.identifierForVendor ?? 'IOS-UNKNOWN-DEVICE';
       }
     } catch (_) {}
@@ -56,6 +67,7 @@ class AuthService {
       'device_name': deviceName.isNotEmpty ? deviceName : 'Android Device',
       'device_id': deviceId.isNotEmpty ? deviceId : 'UNKNOWN',
       'serial_number': serialNumber,
+      'android_version': androidVersion,
     };
   }
 
@@ -65,6 +77,42 @@ class AuthService {
   Future<String> getDeviceUniqueIdentifier() async {
     final details = await getDeviceDetails();
     return details['serial_number']!;
+  }
+
+  /**
+   * Verify hardware identity or auto-bind current device to student session.
+   */
+  Future<Map<String, dynamic>> verifyDevice() async {
+    final details = await getDeviceDetails();
+    try {
+      final response = await _api.post(
+        ApiEndpoints.verifyDevice,
+        data: {
+          'serial_number': details['serial_number']!,
+          'device_name': details['device_name']!,
+          'device_id': details['device_id']!,
+          'android_version': details['android_version'] ?? '',
+        },
+      );
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        if (data['status'] == 'success' && data['user'] != null) {
+          final currentUser = await TokenStorage.getUser();
+          if (currentUser != null && data['user'] is Map) {
+            final updated = Map<String, dynamic>.from(currentUser);
+            (data['user'] as Map).forEach((k, v) {
+              updated[k.toString()] = v;
+            });
+            await TokenStorage.saveUser(updated);
+          }
+        }
+        return data;
+      }
+      return {'status': 'error', 'message': 'Respons verifikasi perangkat tidak valid.'};
+    } catch (e) {
+      // Re-throw or return error map with message
+      return {'status': 'error', 'message': e.toString()};
+    }
   }
 
   /**
@@ -80,6 +128,7 @@ class AuthService {
     final serialNumber = details['serial_number']!;
     final deviceName = details['device_name']!;
     final deviceId = details['device_id']!;
+    final androidVersion = details['android_version'] ?? '';
 
     final response = await _api.post(
       ApiEndpoints.login,
@@ -90,6 +139,7 @@ class AuthService {
         'serial_number': serialNumber,
         'device_name': deviceName,
         'device_id': deviceId,
+        'android_version': androidVersion,
       },
     );
 
@@ -117,6 +167,7 @@ class AuthService {
     final serialNumber = details['serial_number']!;
     final deviceName = details['device_name']!;
     final deviceId = details['device_id']!;
+    final androidVersion = details['android_version'] ?? '';
 
     final response = await _api.post(
       ApiEndpoints.studentLogin,
@@ -127,6 +178,7 @@ class AuthService {
         'serial_number': serialNumber,
         'device_name': deviceName,
         'device_id': deviceId,
+        'android_version': androidVersion,
       },
     );
 
