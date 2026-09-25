@@ -55,8 +55,10 @@ class _LockedScreenState extends State<LockedScreen> {
     // lockHardwareVolume: false allows the student to lower volume with physical volume buttons
     AlarmPlayerService.playSiren(lockHardwareVolume: false);
 
-    // Auto-poll unlock status every 4 seconds so student doesn't need to manually spam the button
-    if (_examId != null) {
+    // Auto-poll unlock status every 4 seconds — only for anti-cheat lockouts, NOT for proctor_kick (terminated)
+    final eventType = widget.arguments?['event_type'] ?? '';
+    final bool isProctorKick = eventType == 'proctor_kick';
+    if (_examId != null && !isProctorKick) {
       _autoPollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
         if (!_isChecking && mounted) {
           _silentCheckUnlock();
@@ -251,7 +253,7 @@ class _LockedScreenState extends State<LockedScreen> {
         case 'external_display':
           return 'Layar Eksternal / Screen Mirroring Tersambung';
         case 'overlay_detected':
-          return 'Jendela Mengambang / Tirai Notifikasi';
+          return 'Aplikasi Overlay / Tirai Notifikasi';
         case 'notification_pulldown':
           return 'Membuka Notifikasi Sistem';
         case 'volume_tamper':
@@ -285,7 +287,7 @@ class _LockedScreenState extends State<LockedScreen> {
         case 'external_display':
           return 'Kabel HDMI, adapter display, atau screen mirroring nirkabel terdeteksi tersambung ke perangkat.';
         case 'overlay_detected':
-          return 'Aplikasi popup mengambang (floating app / translation bubble) atau tirai status bar ditarik ke bawah.';
+          return 'Aplikasi overlay atau tirai notifikasi terdeteksi di atas layar ujian. Pastikan tidak ada aplikasi mengambang (floating app, bubble chat, atau translation overlay) yang aktif.';
         case 'notification_pulldown':
           return 'Bilah status atau panel notifikasi ditarik ke bawah saat ujian sedang berlangsung.';
         default:
@@ -458,8 +460,8 @@ class _LockedScreenState extends State<LockedScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // QR Code Unblock Card (Expandable show/hide)
-                      if (_qrPayload != null) ...[
+                      // QR Code Unblock Card — only shown for anti-cheat lockouts, not proctor_kick
+                      if (_qrPayload != null && rawEventType != 'proctor_kick') ...[
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 240),
                           curve: Curves.easeInOutCubic,
@@ -676,24 +678,38 @@ class _LockedScreenState extends State<LockedScreen> {
                         const SizedBox(height: 16),
                       ],
 
-                      // Primary Action: Check Unlock Button
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryShiei,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      // Primary Action: proctor_kick = go home; anti-cheat lockout = check unlock
+                      if (rawEventType == 'proctor_kick') ...[  
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF334155),
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: const Icon(Icons.home_rounded, size: 20),
+                          label: const Text('Kembali ke Beranda Ujian'),
+                          onPressed: _returnToExamList,
                         ),
-                        icon: _isChecking
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Icon(Icons.refresh_rounded, size: 20),
-                        label: const Text('Cek Status Buka Kunci dari Pengawas'),
-                        onPressed: _isChecking ? null : _checkUnlockStatus,
-                      ),
+                      ] else ...[  
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryShiei,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 50),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          icon: _isChecking
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Icon(Icons.refresh_rounded, size: 20),
+                          label: const Text('Cek Status Buka Kunci dari Pengawas'),
+                          onPressed: _isChecking ? null : _checkUnlockStatus,
+                        ),
+                      ],
                       const SizedBox(height: 12),
 
                       // Secondary Action: Mute or Restart Alarm Siren
