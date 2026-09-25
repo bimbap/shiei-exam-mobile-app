@@ -25,6 +25,7 @@ import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import androidx.core.content.FileProvider
 import java.io.File
 import java.net.Socket
@@ -40,12 +41,15 @@ import java.util.Locale
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "id.shiei/lockdown"
+    private val EVENT_CHANNEL = "id.shiei/lockdown_events"
     private var isVolumeLockActive = false
     private var audioManager: AudioManager? = null
     private var volumeObserver: ContentObserver? = null
     private var telephonyManager: TelephonyManager? = null
     private var isPhoneCallActive = false
     private var isKioskSystemBarsBlocked = false
+    private var screenshotEventSink: EventChannel.EventSink? = null
+    private var screenshotCallback: Any? = null // holds ScreenCaptureCallback on API 34+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -561,6 +565,47 @@ class MainActivity : FlutterActivity() {
                 }
 
                 else -> result.notImplemented()
+            }
+        }
+
+        // Screenshot detection event channel (Android 14+ native ScreenCaptureCallback)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    screenshotEventSink = events
+                    registerScreenshotCallback()
+                }
+                override fun onCancel(arguments: Any?) {
+                    screenshotEventSink = null
+                    unregisterScreenshotCallback()
+                }
+            })
+    }
+
+    private fun registerScreenshotCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34 (Android 14)
+            try {
+                val cb = android.app.Activity.ScreenCaptureCallback {
+                    // Fires on UI thread when a screenshot of this activity is taken
+                    screenshotEventSink?.success("screenshot_attempt")
+                }
+                registerScreenCaptureCallback(mainExecutor, cb)
+                screenshotCallback = cb
+            } catch (e: Exception) {
+                // Unsupported on this device, silently ignore
+            }
+        }
+    }
+
+    private fun unregisterScreenshotCallback() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            try {
+                (screenshotCallback as? android.app.Activity.ScreenCaptureCallback)?.let {
+                    unregisterScreenCaptureCallback(it)
+                }
+                screenshotCallback = null
+            } catch (e: Exception) {
+                // Ignore
             }
         }
     }

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../config/routes.dart';
 import '../../main.dart' show appNavigatorKey;
@@ -22,6 +24,10 @@ class LockdownService with WidgetsBindingObserver {
   bool _isHandlingViolation = false;
   bool _isOnPhoneCall = false;
   bool _isCharging = false;
+  StreamSubscription<dynamic>? _screenshotSubscription;
+
+  static const EventChannel _screenshotEventChannel =
+      EventChannel('id.shiei/lockdown_events');
 
   bool get isHandlingViolation => _isHandlingViolation;
   bool get isLockdownActive => _isLockdownActive;
@@ -65,6 +71,20 @@ class LockdownService with WidgetsBindingObserver {
 
     // Register lifecycle observer
     WidgetsBinding.instance.addObserver(this);
+
+    // Subscribe to native screenshot detection (Android 14+ ScreenCaptureCallback)
+    _screenshotSubscription?.cancel();
+    _screenshotSubscription = _screenshotEventChannel
+        .receiveBroadcastStream()
+        .listen((event) {
+      if (!_isLockdownActive || _isHandlingViolation) return;
+      if (event == 'screenshot_attempt') {
+        handleViolation(
+          eventType: 'screenshot_attempt',
+          details: 'Tangkapan layar berhasil diambil saat ujian berlangsung.',
+        );
+      }
+    }, onError: (_) {});
   }
 
   /**
@@ -99,6 +119,8 @@ class LockdownService with WidgetsBindingObserver {
 
     WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
+    _screenshotSubscription?.cancel();
+    _screenshotSubscription = null;
     if (stopAlarm) {
       AlarmPlayerService.stopSiren();
     }
