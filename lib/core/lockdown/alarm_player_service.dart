@@ -1,4 +1,6 @@
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
+import '../auth/token_storage.dart';
 import 'volume_lock_service.dart';
 
 class AlarmPlayerService {
@@ -12,8 +14,18 @@ class AlarmPlayerService {
    * [lockHardwareVolume]: When false (default), the alarm blasts at 100% volume
    * initially, but the user is free to lower or mute the volume using their
    * physical hardware volume buttons.
+   * [force]: When true, ignores debug anti-alarm bypass (for manual user testing).
    */
-  static Future<void> playSiren({bool lockHardwareVolume = false}) async {
+  static Future<void> playSiren({
+    bool lockHardwareVolume = false,
+    bool force = false,
+  }) async {
+    // Debug Mode Anti-Alarm / Volume Bypass Check
+    if (!force && kDebugMode && await TokenStorage.isAntiAlarmBypassEnabled()) {
+      debugPrint('[AlarmPlayerService] Debug Anti-Alarm / Volume bypass active. Siren suppressed.');
+      return;
+    }
+
     // 1. Force native hardware volume to 100%
     try {
       if (lockHardwareVolume) {

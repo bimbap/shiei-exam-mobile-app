@@ -29,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _deviceModel = 'Memuat...';
   bool _isScreenshotProtectionEnabled = true;
   bool _isAppExitBypassEnabled = false;
+  bool _isAntiAlarmBypassEnabled = false;
 
   // Admin License State
   bool _isAdmin = false;
@@ -48,6 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final model = await VolumeLockService.getDeviceId();
     final isSec = await TokenStorage.isScreenshotProtectionEnabled();
     final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+    final isAlarmBypass = await TokenStorage.isAntiAlarmBypassEnabled();
 
     // Determine admin role status and school context
     final role = await TokenStorage.getRole();
@@ -71,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _deviceModel = model;
         _isScreenshotProtectionEnabled = isSec;
         _isAppExitBypassEnabled = isExitBypass;
+        _isAntiAlarmBypassEnabled = isAlarmBypass;
         _isAdmin = isAdmin;
         _schoolData = school;
       });
@@ -177,6 +180,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           context,
           title: 'Bypass Keluar Aplikasi DINONAKTIFKAN',
           subtitle: 'Proteksi fullscreen & lockout ujian kembali normal.',
+          type: NotificationType.info,
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleAntiAlarmBypass(bool val) async {
+    setState(() {
+      _isAntiAlarmBypassEnabled = val;
+    });
+    await TokenStorage.setAntiAlarmBypass(val);
+
+    if (mounted) {
+      if (val) {
+        AppNotification.show(
+          context,
+          title: 'Bypass Suara Alarm DIAKTIFKAN',
+          subtitle: 'Sirine darurat & pemaksaan volume max dinonaktifkan saat lockout.',
+          type: NotificationType.warning,
+        );
+      } else {
+        AppNotification.show(
+          context,
+          title: 'Bypass Suara Alarm DINONAKTIFKAN',
+          subtitle: 'Sirine keamanan & volume 100% kembali aktif saat lockout.',
           type: NotificationType.info,
         );
       }
@@ -385,6 +413,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         inactiveThumbColor: isDark ? Colors.white70 : const Color(0xFF94A3B8),
                         inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                         onChanged: _toggleAppExitBypass,
+                      ),
+                    ],
+                  ),
+                  Divider(color: dividerColor, height: 18),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Bypass Suara Alarm (Anti-Berisik)',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: titleColor),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: const Color(0xFFEF4444).withValues(alpha: 0.4),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'DEBUG ONLY',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFFDC2626),
+                                      letterSpacing: 0.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _isAntiAlarmBypassEnabled
+                                  ? 'Bypass aktif: Sirine hening & volume tidak dipaksa 100% saat lockout'
+                                  : 'Standar: Sirine keamanan berbunyi kencang & volume dipaksa 100%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _isAntiAlarmBypassEnabled ? const Color(0xFFFBBF24) : AppTheme.primaryGlow,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _isAntiAlarmBypassEnabled,
+                        activeThumbColor: const Color(0xFFFBBF24),
+                        activeTrackColor: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                        inactiveThumbColor: isDark ? Colors.white70 : const Color(0xFF94A3B8),
+                        inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        onChanged: _toggleAntiAlarmBypass,
                       ),
                     ],
                   ),

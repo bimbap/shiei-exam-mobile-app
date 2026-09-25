@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -26,6 +27,7 @@ class _LockedScreenState extends State<LockedScreen> {
   final ApiClient _api = ApiClient();
   bool _isChecking = false;
   bool _isAlarmMuted = false;
+  bool _isAntiAlarmBypassed = false;
   int? _examId;
   Timer? _autoPollTimer;
   Map<String, dynamic>? _currentUser;
@@ -51,7 +53,19 @@ class _LockedScreenState extends State<LockedScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: SystemUiOverlay.values);
     AppTheme.applySystemOverlayStyle();
     
-    // Ensure the loud security siren continues blasting continuously
+    // Check if debug anti-alarm bypass is active
+    if (kDebugMode) {
+      TokenStorage.isAntiAlarmBypassEnabled().then((bypassed) {
+        if (bypassed && mounted) {
+          setState(() {
+            _isAlarmMuted = true;
+            _isAntiAlarmBypassed = true;
+          });
+        }
+      });
+    }
+
+    // Ensure the loud security siren continues blasting continuously (unless bypassed in debug)
     // lockHardwareVolume: false allows the student to lower volume with physical volume buttons
     AlarmPlayerService.playSiren(lockHardwareVolume: false);
 
@@ -772,29 +786,57 @@ class _LockedScreenState extends State<LockedScreen> {
                           ),
                           onPressed: () async {
                             if (_isAlarmMuted) {
-                              await AlarmPlayerService.playSiren(lockHardwareVolume: false);
-                              if (mounted) {
-                                setState(() => _isAlarmMuted = false);
-                                AppNotification.showWarning(
-                                  context,
-                                  'Sirine Dinyalakan',
-                                  subtitle: 'Suara sirine peringatan kembali aktif.',
-                                );
-                              }
+                              await AlarmPlayerService.playSiren(lockHardwareVolume: false, force: true);
+                              if (!mounted || !context.mounted) return;
+                              setState(() => _isAlarmMuted = false);
+                              AppNotification.showWarning(
+                                context,
+                                'Sirine Dinyalakan',
+                                subtitle: 'Suara sirine peringatan kembali aktif.',
+                              );
                             } else {
                               await AlarmPlayerService.stopSiren();
-                              if (mounted) {
-                                setState(() => _isAlarmMuted = true);
-                                AppNotification.showInfo(
-                                  context,
-                                  'Sirine Dimatikan',
-                                  subtitle: 'Suara sirine peringatan telah dimatikan.',
-                                );
-                              }
+                              if (!mounted || !context.mounted) return;
+                              setState(() => _isAlarmMuted = true);
+                              AppNotification.showInfo(
+                                context,
+                                'Sirine Dimatikan',
+                                subtitle: 'Suara sirine peringatan telah dimatikan.',
+                              );
                             }
                           },
                         ),
                       ),
+                      if (_isAntiAlarmBypassed) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.volume_off_rounded, size: 14, color: Color(0xFFDC2626)),
+                              const SizedBox(width: 6),
+                              Text(
+                                'DEBUG: Anti-Alarm Aktif (Sirine Dibisukan Otomatis)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Text(
                         'Tip: Kamu juga bisa mengecilkan suara sirine langsung lewat tombol volume HP.',
