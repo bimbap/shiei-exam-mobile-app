@@ -858,6 +858,7 @@ class TeacherPortalController extends ChangeNotifier {
     try {
       final res = await _api.post(ApiEndpoints.unlockExam(linkId, studentId));
       if (res.data != null && res.data['status'] == 'success') {
+        removeFraudAlertForStudent(studentId);
         await loadMonitoringData(silent: true);
         return true;
       }
@@ -887,6 +888,7 @@ class TeacherPortalController extends ChangeNotifier {
     try {
       final res = await _api.post(ApiEndpoints.kickStudent(linkId, studentId));
       if (res.data != null && res.data['status'] == 'success') {
+        removeFraudAlertForStudent(studentId);
         await loadMonitoringData(silent: true);
         return true;
       }
@@ -905,6 +907,7 @@ class TeacherPortalController extends ChangeNotifier {
         },
       );
       if (res.data != null && res.data['status'] == 'success') {
+        removeFraudAlertForStudent(studentId);
         await loadStudents();
         await loadMonitoringData(silent: true);
         return true;
@@ -1453,6 +1456,9 @@ class TeacherPortalController extends ChangeNotifier {
       final status = (r['status'] ?? '').toString().toLowerCase();
       final isLocked = r['is_locked'] == true;
       if (status == 'blocked' || status == 'locked' || isLocked) {
+        // Exclude terminated/kicked students
+        if (status == 'terminated' || r['lock_reason'] == 'proctor_kick') continue;
+
         final studentId = r['user_id'] ?? r['student_id'] ?? r['user']?['id'] ?? r['id'];
         final intId = studentId is int ? studentId : int.tryParse(studentId.toString()) ?? 0;
         if (intId > 0) {
@@ -1466,6 +1472,30 @@ class TeacherPortalController extends ChangeNotifier {
             });
             _activeFraudAlerts.insert(0, r);
           }
+        }
+      }
+    }
+
+    // Auto-prune / remove alerts for students that have been solved or unlocked
+    if (currentBlocked.isEmpty) {
+      if (_activeFraudAlerts.isNotEmpty) {
+        _activeFraudAlerts.clear();
+        _latestFraudAlert = null;
+        stopFraudAlertSound();
+      }
+    } else {
+      final initialAlertCount = _activeFraudAlerts.length;
+      _activeFraudAlerts.removeWhere((a) {
+        final aId = a['user_id'] ?? a['student_id'] ?? a['user']?['id'] ?? a['id'];
+        final intId = aId is int ? aId : int.tryParse(aId.toString()) ?? 0;
+        return !currentBlocked.contains(intId);
+      });
+      if (_activeFraudAlerts.length != initialAlertCount) {
+        if (_activeFraudAlerts.isEmpty) {
+          _latestFraudAlert = null;
+          stopFraudAlertSound();
+        } else {
+          _latestFraudAlert = _activeFraudAlerts.first;
         }
       }
     }
