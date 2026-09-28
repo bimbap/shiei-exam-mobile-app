@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _serverUrlController = TextEditingController(text: AppConfig.baseUrl);
   final _authService = AuthService();
+  bool _isSavingServer = false;
 
   String _deviceSerial = 'Memuat...';
   String _deviceName = 'Memuat...';
@@ -124,14 +126,104 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
-  void _saveServerUrl() {
-    final url = _serverUrlController.text.trim();
-    AppConfig.setCustomBaseUrl(url);
-    AppNotification.showSuccess(
-      context,
-      'Pengaturan Server Disimpan',
-      subtitle: AppConfig.baseUrl,
-    );
+  Future<void> _saveServerUrl() async {
+    if (_isSavingServer) return;
+
+    final rawUrl = _serverUrlController.text.trim();
+    if (rawUrl.isEmpty) {
+      AppNotification.show(
+        context,
+        title: 'Pengaturan Database Gagal Tersimpan',
+        subtitle: 'Alamat URL server database tidak boleh kosong.',
+        type: NotificationType.error,
+        duration: const Duration(milliseconds: 3200),
+      );
+      return;
+    }
+
+    String formattedUrl = rawUrl;
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = 'http://$formattedUrl';
+    }
+
+    final uri = Uri.tryParse(formattedUrl);
+    if (uri == null || !uri.hasAuthority) {
+      AppNotification.show(
+        context,
+        title: 'Pengaturan Database Gagal Tersimpan',
+        subtitle: 'Format URL server database tidak valid.',
+        type: NotificationType.error,
+        duration: const Duration(milliseconds: 3200),
+      );
+      return;
+    }
+
+    setState(() => _isSavingServer = true);
+
+    try {
+      AppConfig.setCustomBaseUrl(formattedUrl);
+      _serverUrlController.text = AppConfig.baseUrl;
+
+      // 1. Notifikasi pertama: Pengaturan database berhasil tersimpan
+      AppNotification.show(
+        context,
+        title: 'Pengaturan Database Berhasil Disimpan',
+        subtitle: AppConfig.baseUrl,
+        type: NotificationType.success,
+        duration: const Duration(milliseconds: 2500),
+      );
+    } catch (_) {
+      setState(() => _isSavingServer = false);
+      AppNotification.show(
+        context,
+        title: 'Pengaturan Database Gagal Tersimpan',
+        subtitle: 'Terjadi kegagalan saat menyimpan konfigurasi ke memori.',
+        type: NotificationType.error,
+        duration: const Duration(milliseconds: 3200),
+      );
+      return;
+    }
+
+    // Jeda waktu yang cukup agar pengguna dapat membaca notifikasi pertama
+    await Future.delayed(const Duration(milliseconds: 1800));
+
+    // 2. Verifikasi koneksi aktif ke server backend & database (Push Notif ke-2)
+    try {
+      final res = await ApiClient().dio.get(
+        '/health',
+        options: Options(
+          sendTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      if (res.statusCode == 200) {
+        if (mounted) {
+          AppNotification.show(
+            context,
+            title: 'Koneksi Berhasil Tersambung',
+            subtitle: 'Database & backend terhubung aktif (${AppConfig.baseUrl})',
+            type: NotificationType.success,
+            duration: const Duration(milliseconds: 3500),
+          );
+        }
+      } else {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+    } catch (_) {
+      if (mounted) {
+        AppNotification.show(
+          context,
+          title: 'Koneksi Gagal Tersambung',
+          subtitle: 'Pengaturan tersimpan, tapi server backend tidak merespons.',
+          type: NotificationType.error,
+          duration: const Duration(milliseconds: 3500),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSavingServer = false);
+      }
+    }
   }
 
   Future<void> _toggleScreenshotProtection(bool val) async {
@@ -261,9 +353,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     backgroundColor: AppTheme.primaryShiei,
                     foregroundColor: Colors.white,
                   ),
-                  icon: const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('Simpan Pengaturan Server', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                  onPressed: _saveServerUrl,
+                  icon: _isSavingServer
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_rounded, size: 18),
+                  label: Text(
+                    _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _isSavingServer ? null : _saveServerUrl,
                 ),
               ],
             ),

@@ -1437,6 +1437,13 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
     final rawSecondsSince = item['seconds_since_heartbeat'];
     final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
     final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+    // Waiting: unlocked by proctor but student hasn't resumed active live exam yet
+    final bool isWaiting = !isKicked &&
+        !isLocked &&
+        !isCompleted &&
+        !isExpired &&
+        item['unlocked_at'] != null &&
+        (status == 'pending' || isLost);
     final String? networkType = item['network_type']?.toString() ?? (item['metadata'] is Map ? item['metadata']['network_type']?.toString() : null);
     final dynamic rawOnCall = item['is_on_call'] ?? (item['metadata'] is Map ? item['metadata']['is_on_call'] : null);
     final bool isOnCall = rawOnCall == true ||
@@ -1492,6 +1499,15 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
       statusLabel = 'TERPUTUS';
       statusBadgeBg = const Color(0xFF64748B).withValues(alpha: 0.12);
       statusBadgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    } else if (isWaiting) {
+      // Unlocked by proctor — student hasn't resumed live exam yet
+      cardBorderColor = const Color(0xFFF59E0B).withValues(alpha: 0.45);
+      avatarBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      iconColor = const Color(0xFFF59E0B);
+      statusIcon = Icons.hourglass_top_rounded;
+      statusLabel = 'MENUNGGU';
+      statusBadgeBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      statusBadgeTextColor = const Color(0xFFF59E0B);
     } else if (status == 'pending') {
       cardBorderColor = const Color(0xFFF59E0B).withValues(alpha: 0.35);
       avatarBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
@@ -2121,6 +2137,16 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
     final String? lockReason = item['lock_reason']?.toString();
     final bool isKicked = status == 'terminated' || lockReason == 'proctor_kick' || item['is_kicked'] == true;
     final bool isLocked = !isKicked && (item['is_locked'] == true || status == 'locked' || status == 'split_screen');
+    final rawOnline = item['is_online'];
+    final rawSecondsSince = item['seconds_since_heartbeat'];
+    final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+    final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+    final bool isWaiting = !isKicked &&
+        !isLocked &&
+        item['unlocked_at'] != null &&
+        (status == 'pending' || isLost) &&
+        status != 'completed' &&
+        status != 'submitted';
     final bool wasUnlocked = item['unlocked_at'] != null ||
         item['unlocked_by'] != null ||
         (!isLocked && !isKicked && (lockReason != null && lockReason.isNotEmpty));
@@ -2213,7 +2239,9 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                                 ? const Color(0xFFBE123C).withValues(alpha: 0.15)
                                 : isLocked
                                     ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                                    : const Color(0xFF10B981).withValues(alpha: 0.15),
+                                    : isWaiting
+                                        ? const Color(0xFFF59E0B).withValues(alpha: 0.15)
+                                        : const Color(0xFF10B981).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -2221,7 +2249,9 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                                 ? 'DIKELUARKAN'
                                 : isLocked
                                     ? 'TERKUNCI'
-                                    : 'SUDAH DIBUKA',
+                                    : isWaiting
+                                        ? 'MENUNGGU'
+                                        : 'SUDAH DIBUKA',
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
@@ -2229,7 +2259,9 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                                   ? const Color(0xFFBE123C)
                                   : isLocked
                                       ? const Color(0xFFEF4444)
-                                      : const Color(0xFF10B981),
+                                      : isWaiting
+                                          ? const Color(0xFFF59E0B)
+                                          : const Color(0xFF10B981),
                             ),
                           ),
                         ),

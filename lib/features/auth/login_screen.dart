@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../config/app_config.dart';
 import '../../config/routes.dart';
+import '../../core/api/api_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_exit_dialog.dart';
 import '../../shared/widgets/app_notification.dart';
@@ -116,14 +118,104 @@ class _LoginScreenState extends State<LoginScreen> {
                 minimumSize: const Size(90, 42),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-              onPressed: () {
-                AppConfig.setCustomBaseUrl(serverController.text);
+              onPressed: () async {
+                final rawUrl = serverController.text.trim();
                 Navigator.pop(ctx);
-                AppNotification.showSuccess(
-                  context,
-                  'Server Aktif',
-                  subtitle: AppConfig.baseUrl,
-                );
+
+                if (rawUrl.isEmpty) {
+                  if (context.mounted) {
+                    AppNotification.show(
+                      context,
+                      title: 'Pengaturan Database Gagal Tersimpan',
+                      subtitle: 'Alamat URL server database tidak boleh kosong.',
+                      type: NotificationType.error,
+                      duration: const Duration(milliseconds: 3200),
+                    );
+                  }
+                  return;
+                }
+
+                String formattedUrl = rawUrl;
+                if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+                  formattedUrl = 'http://$formattedUrl';
+                }
+
+                final uri = Uri.tryParse(formattedUrl);
+                if (uri == null || !uri.hasAuthority) {
+                  if (context.mounted) {
+                    AppNotification.show(
+                      context,
+                      title: 'Pengaturan Database Gagal Tersimpan',
+                      subtitle: 'Format URL server database tidak valid.',
+                      type: NotificationType.error,
+                      duration: const Duration(milliseconds: 3200),
+                    );
+                  }
+                  return;
+                }
+
+                try {
+                  AppConfig.setCustomBaseUrl(formattedUrl);
+
+                  // 1. Notifikasi pertama: Pengaturan database berhasil tersimpan
+                  if (context.mounted) {
+                    AppNotification.show(
+                      context,
+                      title: 'Pengaturan Database Berhasil Disimpan',
+                      subtitle: AppConfig.baseUrl,
+                      type: NotificationType.success,
+                      duration: const Duration(milliseconds: 2500),
+                    );
+                  }
+                } catch (_) {
+                  if (context.mounted) {
+                    AppNotification.show(
+                      context,
+                      title: 'Pengaturan Database Gagal Tersimpan',
+                      subtitle: 'Terjadi kegagalan saat menyimpan konfigurasi ke memori.',
+                      type: NotificationType.error,
+                      duration: const Duration(milliseconds: 3200),
+                    );
+                  }
+                  return;
+                }
+
+                // Jeda waktu yang cukup agar pengguna dapat membaca notifikasi pertama
+                await Future.delayed(const Duration(milliseconds: 1800));
+
+                // 2. Verifikasi koneksi aktif ke server backend & database (Push Notif ke-2)
+                try {
+                  final res = await ApiClient().dio.get(
+                    '/health',
+                    options: Options(
+                      sendTimeout: const Duration(seconds: 5),
+                      receiveTimeout: const Duration(seconds: 5),
+                    ),
+                  );
+                  if (res.statusCode == 200) {
+                    if (context.mounted) {
+                      AppNotification.show(
+                        context,
+                        title: 'Koneksi Berhasil Tersambung',
+                        subtitle: 'Database & backend terhubung aktif (${AppConfig.baseUrl})',
+                        type: NotificationType.success,
+                        duration: const Duration(milliseconds: 3500),
+                      );
+                    }
+                  } else {
+                    throw Exception('Server returned ${res.statusCode}');
+                  }
+                } catch (_) {
+                  if (context.mounted) {
+                    AppNotification.show(
+                      context,
+                      title: 'Koneksi Gagal Tersambung',
+                      subtitle: 'Pengaturan tersimpan, tapi server backend tidak merespons.',
+                      type: NotificationType.error,
+                      duration: const Duration(milliseconds: 3500),
+                    );
+                  }
+                }
               },
               child: const Text('Simpan'),
             ),
@@ -353,12 +445,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Double-Bezel Nested Outer Card
                       Container(
                         decoration: BoxDecoration(
-                          color: isDark ? AppTheme.surfaceDark.withOpacity(0.85) : Colors.white,
+                          color: isDark ? AppTheme.surfaceDark.withValues(alpha: 0.85) : Colors.white,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: isDark ? AppTheme.borderSubtle.withOpacity(0.7) : const Color(0xFFE2E8F0)),
+                          border: Border.all(color: isDark ? AppTheme.borderSubtle.withValues(alpha: 0.7) : const Color(0xFFE2E8F0)),
                           boxShadow: [
                             BoxShadow(
-                              color: isDark ? Colors.black.withOpacity(0.35) : Colors.black.withOpacity(0.06),
+                              color: isDark ? Colors.black.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.06),
                               blurRadius: 30,
                               offset: const Offset(0, 10),
                             ),

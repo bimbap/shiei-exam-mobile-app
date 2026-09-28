@@ -330,7 +330,32 @@ class TeacherPortalController extends ChangeNotifier {
 
   int get inProgressCount => _monitoringRecords.where((r) {
         final status = r['status']?.toString();
-        return status == 'in_progress';
+        final rawOnline = r['is_online'];
+        final rawSecondsSince = r['seconds_since_heartbeat'];
+        final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+        final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+        final isWaiting = r['unlocked_at'] != null &&
+            r['is_locked'] != true &&
+            status != 'terminated' &&
+            status != 'completed' &&
+            status != 'submitted' &&
+            (status == 'pending' || isLost);
+        return status == 'in_progress' && !isWaiting;
+      }).length;
+
+  /// Students who were unlocked by proctor but haven't resumed the active exam yet.
+  int get waitingCount => _monitoringRecords.where((r) {
+        final status = r['status']?.toString();
+        final rawOnline = r['is_online'];
+        final rawSecondsSince = r['seconds_since_heartbeat'];
+        final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+        final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+        return r['unlocked_at'] != null &&
+            r['is_locked'] != true &&
+            status != 'terminated' &&
+            status != 'completed' &&
+            status != 'submitted' &&
+            (status == 'pending' || isLost);
       }).length;
 
   int get lockedCount {
@@ -407,12 +432,24 @@ class TeacherPortalController extends ChangeNotifier {
       final user = r['user'] as Map<String, dynamic>? ?? {};
       final link = r['link'] as Map<String, dynamic>? ?? {};
       final status = r['status']?.toString() ?? 'pending';
+      final rawOnline = r['is_online'];
+      final rawSecondsSince = r['seconds_since_heartbeat'];
+      final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+      final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
       final isLocked = r['is_locked'] == true || status == 'locked';
+      final isWaiting = r['unlocked_at'] != null &&
+          !isLocked &&
+          status != 'terminated' &&
+          status != 'completed' &&
+          status != 'submitted' &&
+          (status == 'pending' || isLost);
 
       // Status filter
       if (_monitorStatusFilter != null) {
         if (_monitorStatusFilter == 'locked') {
           if (!isLocked && status != 'split_screen' && status != 'exited') return false;
+        } else if (_monitorStatusFilter == 'waiting') {
+          if (!isWaiting) return false;
         } else if (status != _monitorStatusFilter) {
           return false;
         }
@@ -1455,6 +1492,11 @@ class TeacherPortalController extends ChangeNotifier {
     for (final r in records) {
       final status = (r['status'] ?? '').toString().toLowerCase();
       final isLocked = r['is_locked'] == true;
+      final wasUnlocked = r['unlocked_at'] != null || r['unlocked_by'] != null;
+
+      // Exclude unlocked students who are not locked again
+      if (wasUnlocked && !isLocked && status != 'locked' && status != 'blocked') continue;
+
       if (status == 'blocked' || status == 'locked' || isLocked) {
         // Exclude terminated/kicked students
         if (status == 'terminated' || r['lock_reason'] == 'proctor_kick') continue;

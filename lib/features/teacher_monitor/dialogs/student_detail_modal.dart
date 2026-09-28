@@ -646,7 +646,9 @@ class StudentDetailModal {
                         isKicked: isKicked,
                         isExamEnded: isExamEnded,
                         isLocked: isLocked,
-                        isWaiting: status == 'pending' || wasUnlocked,
+                        isWaiting: !isKicked && !isLocked && !isCompleted && !isExpired &&
+                            item['unlocked_at'] != null &&
+                            (status == 'pending' || status != 'in_progress'),
                         isDark: isDark,
                       ),
                     ),

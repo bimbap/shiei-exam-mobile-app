@@ -753,6 +753,13 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
                 final bool isKicked = status == 'terminated' || record['lock_reason'] == 'proctor_kick' || record['is_kicked'] == true;
                 final bool isLocked = !isKicked && (record['is_locked'] == true || status == 'locked' || status == 'split_screen');
                 final bool isExamEnded = (link['status']?.toString() == 'inactive') || (record['is_exam_ended'] == true);
+                final rawOnline = record['is_online'];
+                final rawSecondsSince = record['seconds_since_heartbeat'];
+                final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+                final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+                final bool isWaiting = !isKicked && !isLocked && record['unlocked_at'] != null &&
+                    (status == 'pending' || isLost) &&
+                    status != 'completed' && status != 'submitted';
                 final bool wasUnlocked = record['unlocked_at'] != null ||
                     record['unlocked_by'] != null ||
                     (!isLocked && !isKicked && (lockReason != null && lockReason.isNotEmpty));
@@ -838,7 +845,9 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
                                             ? 'DIKELUARKAN'
                                             : isLocked
                                                 ? 'TERKUNCI'
-                                                : 'SUDAH DIBUKA',
+                                                : isWaiting
+                                                    ? 'MENUNGGU'
+                                                    : 'SUDAH DIBUKA',
                                         style: TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.w800,
@@ -846,7 +855,9 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
                                               ? const Color(0xFFBE123C)
                                               : isLocked
                                                   ? const Color(0xFFEF4444)
-                                                  : const Color(0xFF10B981),
+                                                  : isWaiting
+                                                      ? const Color(0xFFF59E0B)
+                                                      : const Color(0xFF10B981),
                                         ),
                                       ),
                                     ),
@@ -1623,6 +1634,17 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
     final bool isCompleted = status == 'completed' || status == 'submitted' || record['score'] != null;
     final bool isExamEnded = (link['status']?.toString() == 'inactive') || (record['is_exam_ended'] == true);
     final bool isExpired = isExamEnded && !isKicked && !isLocked && !isCompleted;
+    final rawOnline = record['is_online'];
+    final rawSecondsSince = record['seconds_since_heartbeat'];
+    final int? secondsSince = rawSecondsSince is int ? rawSecondsSince : int.tryParse(rawSecondsSince?.toString() ?? '');
+    final bool isLost = rawOnline == false || (secondsSince != null && secondsSince > 10);
+    // Waiting: unlocked by proctor but student hasn't resumed active live exam yet
+    final bool isWaiting = !isKicked &&
+        !isLocked &&
+        !isCompleted &&
+        !isExpired &&
+        record['unlocked_at'] != null &&
+        (status == 'pending' || isLost);
     final bool canManageStudent = widget.controller.isAdmin || widget.controller.canUnlockStudentForExam(examId, exam: link);
     final bool canUnlock = isLocked && !isExamEnded && !isKicked && canManageStudent;
 
@@ -1684,6 +1706,15 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
       statusLabel = 'WAKTU HABIS';
       statusBadgeBg = const Color(0xFF64748B).withValues(alpha: 0.12);
       statusBadgeTextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
+    } else if (isWaiting) {
+      // Unlocked by proctor — student hasn't re-entered yet
+      cardBorderColor = const Color(0xFFF59E0B).withValues(alpha: 0.45);
+      avatarBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      iconColor = const Color(0xFFF59E0B);
+      statusIcon = Icons.hourglass_top_rounded;
+      statusLabel = 'MENUNGGU';
+      statusBadgeBg = const Color(0xFFF59E0B).withValues(alpha: 0.12);
+      statusBadgeTextColor = const Color(0xFFF59E0B);
     } else {
       cardBorderColor = const Color(0xFF10B981).withValues(alpha: 0.35);
       avatarBg = const Color(0xFF10B981).withValues(alpha: 0.12);
