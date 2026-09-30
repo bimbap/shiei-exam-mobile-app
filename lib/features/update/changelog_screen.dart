@@ -181,6 +181,35 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+
+                // Manual Check for Updates Button
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C),
+                    backgroundColor: isDark ? Colors.transparent : Colors.white,
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFFF97316).withOpacity(0.5) : const Color(0xFFFDBA74),
+                    ),
+                    minimumSize: const Size(double.infinity, 46),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _isCheckingUpdate ? null : _checkUpdate,
+                  icon: _isCheckingUpdate
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C),
+                          ),
+                        )
+                      : const Icon(Icons.sync_rounded, size: 18),
+                  label: Text(
+                    _isCheckingUpdate ? 'Memeriksa Server...' : 'Periksa Pembaruan Sistem (OTA)',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
                 const SizedBox(height: 20),
 
                 Text(
@@ -212,36 +241,6 @@ class _ChangelogScreenState extends State<ChangelogScreen> {
                     },
                   );
                 }),
-
-                const SizedBox(height: 8),
-
-                // Manual Check for Updates Button
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C),
-                    backgroundColor: isDark ? Colors.transparent : Colors.white,
-                    side: BorderSide(
-                      color: isDark ? const Color(0xFFF97316).withOpacity(0.5) : const Color(0xFFFDBA74),
-                    ),
-                    minimumSize: const Size(double.infinity, 48),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: _isCheckingUpdate ? null : _checkUpdate,
-                  icon: _isCheckingUpdate
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: isDark ? const Color(0xFFFB923C) : const Color(0xFFEA580C),
-                          ),
-                        )
-                      : const Icon(Icons.sync_rounded, size: 18),
-                  label: Text(
-                    _isCheckingUpdate ? 'Memeriksa Server...' : 'Periksa Pembaruan Sistem (OTA)',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                ),
                 const SizedBox(height: 24),
               ],
             ),
