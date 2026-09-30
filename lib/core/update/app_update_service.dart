@@ -133,8 +133,8 @@ class AppUpdateService {
       buildNumber: '2026.5',
       releaseDate: '30 September 2026',
       isLatest: true,
-      title: 'Pembaruan Akbar Sistem Ujian v2.5.0',
-      headline: 'Pembaruan v2.5.0 hadir dengan sistem pembaruan otomatis yang lebih praktis, tampilan layar yang lebih nyaman di HP maupun tablet, serta peningkatan keamanan agar ujian berjalan lancar dan tenang.',
+      title: 'Pembaruan Aplikasi v2.5.0',
+      headline: 'Pembaruan v2.5.0 hadir dengan sistem pembaruan otomatis yang lebih praktis serta peningkatan keamanan agar ujian berjalan lancar dan tenang.',
       categories: [
         ChangelogCategory(
           name: 'Fitur Baru',
@@ -142,7 +142,6 @@ class AppUpdateService {
             'Pembaruan Otomatis Lebih Praktis: Aplikasi kini dapat mendeteksi dan mengunduh versi terbaru secara langsung tanpa perlu repot unduh manual.',
             'Catatan Rilis Lebih Jelas: Informasi seputar fitur baru dan perbaikan kini tampil rapi dan mudah dibaca di menu Pengaturan.',
             'Pilihan "Jangan Ingatkan Lagi": Kamu bisa memilih untuk menunda pembaruan sementara waktu agar tidak terganggu saat ingin langsung masuk ujian.',
-            'Tampilan Nyaman di Semua Perangkat: Desain antarmuka otomatis menyesuaikan agar pas dan rapi di smartphone, tablet, maupun laptop.',
           ],
         ),
         ChangelogCategory(
