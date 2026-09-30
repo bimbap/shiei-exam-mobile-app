@@ -29,7 +29,7 @@ void main() {
 
     // Phase 1: Welcome Bottom Card
     expect(find.text('Selamat Datang di Shiei Exam'), findsOneWidget);
-    expect(find.text('Nanti'), findsOneWidget);
+    expect(find.text('Lewatkan'), findsOneWidget);
     expect(find.text('Mulai Tur Siswa'), findsOneWidget);
 
     // Tap "Mulai Tur Siswa" -> Enters Phase 2 (Coachmark Step 1)
@@ -93,8 +93,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Nanti'), findsOneWidget);
-    await tester.tap(find.text('Nanti'));
+    expect(find.text('Lewatkan'), findsOneWidget);
+    await tester.tap(find.text('Lewatkan'));
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 350));
     expect(tourCompleted, isTrue);

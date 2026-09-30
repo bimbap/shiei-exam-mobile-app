@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showServerSettingsDialog() {
-    final serverController = TextEditingController(text: AppConfig.baseUrl);
+    final serverController = TextEditingController(text: AppConfig.inputBaseUrl);
     final isDark = AppTheme.isDark(context);
     showDialog(
       context: context,
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   fontSize: 13,
                 ),
                 decoration: const InputDecoration(
-                  hintText: 'http://192.168.1.100:8000/api/v1',
+                  hintText: 'Contoh: 192.168.1.100:8000 atau exam.sekolah.sch.id',
                   prefixIcon: Icon(Icons.link_rounded, color: AppTheme.primaryGlow, size: 20),
                 ),
               ),
@@ -358,6 +358,17 @@ class _LoginScreenState extends State<LoginScreen> {
         'Validasi Login',
         subtitle: 'Silakan masukkan nama/username dan kata sandi.',
       );
+      return;
+    }
+
+    if (!AppConfig.hasCustomServerUrl) {
+      _controller.setError('Server ujian belum diatur. Silakan atur server terlebih dahulu.');
+      AppNotification.showWarning(
+        context,
+        'Server Belum Dikonfigurasi',
+        subtitle: 'Silakan masukkan alamat IP atau domain server ujian sekolah Anda.',
+      );
+      _showServerSettingsDialog();
       return;
     }
 

@@ -694,7 +694,7 @@ class _ProctorTourDialogState extends State<ProctorTourDialog> with TickerProvid
                                   ),
                                   onPressed: _handleSkip,
                                   child: const Text(
-                                    'Nanti',
+                                    'Lewatkan',
                                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                                   ),
                                 ),

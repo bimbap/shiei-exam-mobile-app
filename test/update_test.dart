@@ -57,7 +57,7 @@ void main() {
   test('VersionChangelog parses categories correctly', () {
     final changelogs = AppUpdateService.fallbackChangelogs;
     expect(changelogs.isNotEmpty, isTrue);
-    expect(changelogs.first.version, equals('2.4.0'));
+    expect(changelogs.first.version, equals('2.5.0'));
     expect(changelogs.first.isLatest, isTrue);
     expect(changelogs.first.categories.length, equals(3));
     expect(changelogs.first.categories.first.name, equals('Fitur Baru'));

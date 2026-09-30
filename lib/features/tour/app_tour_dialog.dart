@@ -3,7 +3,7 @@ import '../../core/auth/token_storage.dart';
 import '../../shared/theme/app_theme.dart';
 
 /// Comprehensive 2-phase Onboarding Tour for Students:
-/// Phase 1: Welcome bottom sheet with 16:9 mascot banner, "Nanti" & "Mulai Tur Siswa"
+/// Phase 1: Welcome bottom sheet with 16:9 mascot banner, "Lewatkan" & "Mulai Tur Siswa"
 /// Phase 2: Coachmark spotlight overlay with live tab switching, speech bubble card,
 ///          mascot avatar, tip box, step pills, animated dots, and notch pointer.
 class TourTargetKeys {
@@ -487,7 +487,7 @@ class _AppTourDialogState extends State<AppTourDialog> with TickerProviderStateM
                                   ),
                                   onPressed: _handleSkip,
                                   child: const Text(
-                                    'Nanti',
+                                    'Lewatkan',
                                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                                   ),
                                 ),

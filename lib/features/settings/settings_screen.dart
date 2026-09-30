@@ -22,7 +22,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _serverUrlController = TextEditingController(text: AppConfig.baseUrl);
+  final _serverUrlController = TextEditingController(text: AppConfig.inputBaseUrl);
   final _authService = AuthService();
   bool _isSavingServer = false;
 
@@ -42,6 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _serverUrlController.text = AppConfig.inputBaseUrl;
     _loadInfo();
   }
 
@@ -342,7 +343,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   controller: _serverUrlController,
                   onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: const InputDecoration(
-                    hintText: 'http://192.168.1.100:8000/api/v1',
+                    hintText: 'Contoh: 192.168.1.100:8000 atau exam.sekolah.sch.id',
                     prefixIcon: Icon(Icons.link_rounded, color: AppTheme.primaryGlow),
                   ),
                 ),

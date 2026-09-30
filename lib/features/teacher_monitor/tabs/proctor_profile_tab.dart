@@ -559,7 +559,7 @@ class ProctorProfileTab extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    AppConfig.baseUrl,
+                                    AppConfig.hasCustomServerUrl ? AppConfig.baseUrl : 'Belum Dikonfigurasi',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
