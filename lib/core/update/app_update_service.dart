@@ -108,19 +108,19 @@ class AppUpdateService {
   static const MethodChannel _platformChannel = MethodChannel('id.shiei/lockdown');
   final ApiClient _api = ApiClient();
 
-  static const String currentAppVersion = '2.4.0';
-  static const int currentAppBuild = 4;
-  static const String currentBuildNumber = '2026.4';
+  static const String currentAppVersion = '2.5.0';
+  static const int currentAppBuild = 5;
+  static const String currentBuildNumber = '2026.5';
 
   /// True if running in debug mode (development / debug build)
   static bool get isDebugBuild => kDebugMode;
 
   /// Dynamic display version string differentiating debug builds from production releases.
-  /// E.g. '2.4.0-debug' vs '2.4.0'
+  /// E.g. '2.5.0-debug' vs '2.5.0'
   static String get displayAppVersion => kDebugMode ? '$currentAppVersion-debug' : currentAppVersion;
 
   /// Dynamic build number string.
-  /// E.g. '2026.4-dev' vs '2026.4'
+  /// E.g. '2026.5-dev' vs '2026.5'
   static String get displayBuildNumber => kDebugMode ? '$currentBuildNumber-dev' : currentBuildNumber;
 
   /// Formatted full version label for settings, changelogs, and headers.
@@ -129,10 +129,45 @@ class AppUpdateService {
   // Local fallback changelogs to ensure offline availability
   static final List<VersionChangelog> fallbackChangelogs = [
     VersionChangelog(
+      version: '2.5.0',
+      buildNumber: '2026.5',
+      releaseDate: '30 September 2026',
+      isLatest: true,
+      title: 'Pembaruan Akbar Sistem Ujian v2.5.0',
+      headline: 'Pembaruan v2.5.0 hadir dengan sistem pembaruan otomatis yang lebih praktis, tampilan layar yang lebih nyaman di HP maupun tablet, serta peningkatan keamanan agar ujian berjalan lancar dan tenang.',
+      categories: [
+        ChangelogCategory(
+          name: 'Fitur Baru',
+          items: [
+            'Pembaruan Otomatis Lebih Praktis: Aplikasi kini dapat mendeteksi dan mengunduh versi terbaru secara langsung tanpa perlu repot unduh manual.',
+            'Catatan Rilis Lebih Jelas: Informasi seputar fitur baru dan perbaikan kini tampil rapi dan mudah dibaca di menu Pengaturan.',
+            'Pilihan "Jangan Ingatkan Lagi": Kamu bisa memilih untuk menunda pembaruan sementara waktu agar tidak terganggu saat ingin langsung masuk ujian.',
+            'Tampilan Nyaman di Semua Perangkat: Desain antarmuka otomatis menyesuaikan agar pas dan rapi di smartphone, tablet, maupun laptop.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Keamanan & Kenyamanan Ujian',
+          items: [
+            'Pengisian Baterai Lebih Nyaman: Tetap bisa mengisi daya baterai lewat colokan listrik tembok selama ujian tanpa takut alarm menyala.',
+            'Penguncian Tombol Kembali: Mencegah aplikasi tertutup secara tidak sengaja saat kamu sedang asyik mengerjakan soal.',
+            'Bantuan Cepat untuk Pengawas: Memudahkan guru atau pengawas membantu siswa jika sewaktu-waktu terjadi kendala teknis di ruang ujian.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Peningkatan & Perbaikan',
+          items: [
+            'Aplikasi Lebih Gesit & Hemat Baterai: Perpindahan layar terasa jauh lebih mulus dan tidak membuat perangkat cepat panas.',
+            'Perbaikan Tulisan & Huruf: Teks di layar ponsel berukuran kompak kini lebih nyaman dibaca tanpa terpotong.',
+            'Tetap Stabil Saat Sinyal Lemah: Aplikasi tetap berjalan lancar dan data tetap aman meski koneksi internet sekolah sempat tersendat.',
+          ],
+        ),
+      ],
+    ),
+    VersionChangelog(
       version: '2.4.0',
       buildNumber: '2026.4',
       releaseDate: '24 September 2026',
-      isLatest: true,
+      isLatest: false,
       title: 'Pembaruan Akbar Ekosistem SHIEI v2.4.0 (Golden Release)',
       headline: 'Integrasi arsitektur multi-platform terpadu, Guided Tour interaktif, Live Proctoring Guru, dan dual-engine cloud sync.',
       categories: [

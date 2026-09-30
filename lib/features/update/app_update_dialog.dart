@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
 
@@ -11,12 +12,26 @@ class AppUpdateDialog extends StatefulWidget {
     required this.updateInfo,
   });
 
-  static Future<void> show(BuildContext context, AppUpdateInfo updateInfo) {
+  static const _storage = FlutterSecureStorage();
+  static String _dismissKey(String version) => 'update_dismissed_v$version';
+
+  /// Show the dialog only if the user hasn't dismissed this version before.
+  /// Force updates always show regardless.
+  static Future<void> show(BuildContext context, AppUpdateInfo updateInfo) async {
+    if (!updateInfo.forceUpdate) {
+      final dismissed = await _storage.read(key: _dismissKey(updateInfo.latestVersion));
+      if (dismissed == 'true') return;
+    }
+    if (!context.mounted) return;
     return showDialog(
       context: context,
       barrierDismissible: !updateInfo.forceUpdate,
       builder: (ctx) => AppUpdateDialog(updateInfo: updateInfo),
     );
+  }
+
+  static Future<void> clearDismissed(String version) async {
+    await _storage.delete(key: _dismissKey(version));
   }
 
   @override
@@ -30,6 +45,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   String? _errorMessage;
   String _statusText = 'Siap mengunduh pembaruan';
   String? _cachedApkPath;
+  bool _doNotShowAgain = false;
 
   @override
   void initState() {
@@ -693,8 +709,51 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                     ),
                     if (!updateInfo.forceUpdate && !_isDownloading) ...[
                       const SizedBox(height: 8),
+                      // "Jangan tampilkan lagi" checkbox
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => setState(() => _doNotShowAgain = !_doNotShowAgain),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: Checkbox(
+                                  value: _doNotShowAgain,
+                                  onChanged: (val) => setState(() => _doNotShowAgain = val ?? false),
+                                  activeColor: isDark ? AppTheme.primaryShiei : const Color(0xFFF97316),
+                                  side: BorderSide(
+                                    color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                                  ),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Jangan ingatkan lagi untuk versi ini',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: () async {
+                          if (_doNotShowAgain) {
+                            await AppUpdateDialog._storage.write(
+                              key: AppUpdateDialog._dismissKey(updateInfo.latestVersion),
+                              value: 'true',
+                            );
+                          }
+                          if (context.mounted) Navigator.of(context).pop();
+                        },
                         child: Text(
                           'Nanti Saja',
                           style: TextStyle(

@@ -1,7 +1,7 @@
 name: shiei_kiosk
 description: "Project SHIEI (市衛) — Secure Exam Browser Mobile Application for Schools"
 publish_to: 'none'
-version: 2.4.0+4
+version: 2.5.0+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
