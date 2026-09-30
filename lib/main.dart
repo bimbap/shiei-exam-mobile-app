@@ -156,6 +156,8 @@ class _SplashScreenState extends State<SplashScreen> {
       await TokenStorage.setOnboardingCompleted(true);
       await TokenStorage.setFirstOpenDone();
       await TokenStorage.setLastAppVersion(currentVersion);
+      // Clean up the installer APK file so User Data storage shrinks back immediately
+      await AppUpdateService.instance.cleanupCachedApks();
     }
 
     final bool shouldShowOnboarding = !isAppUpdate && !isOnboarded;

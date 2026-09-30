@@ -230,6 +230,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         });
       }
     } else {
+      await AppUpdateService.instance.cleanupCachedApks();
       setState(() {
         _isDownloading = false;
         _errorMessage = 'Gagal mengunduh berkas APK. Tautan unduhan mungkin tidak dapat diakses secara publik (404/Private) atau koneksi internet terputus.';

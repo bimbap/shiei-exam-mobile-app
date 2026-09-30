@@ -448,6 +448,32 @@ class AppUpdateService {
     return null;
   }
 
+  /// Clean up stale or leftover downloaded APKs from storage to prevent storage bloat.
+  Future<void> cleanupCachedApks({String? preserveVersion}) async {
+    try {
+      String? dirPath;
+      try {
+        dirPath = await _platformChannel.invokeMethod<String>('getAppCacheDir');
+      } catch (_) {}
+      final baseDir = (dirPath != null && dirPath.isNotEmpty) ? Directory(dirPath) : Directory.systemTemp;
+      if (baseDir.existsSync()) {
+        for (final entity in baseDir.listSync()) {
+          if (entity is File && entity.path.toLowerCase().endsWith('.apk')) {
+            if (preserveVersion != null && entity.path.contains('v$preserveVersion')) {
+              continue;
+            }
+            try {
+              entity.deleteSync();
+              debugPrint('[AppUpdateService] Cleaned up cached APK: ${entity.path}');
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[AppUpdateService] Error cleaning cached APKs: $e');
+    }
+  }
+
   /// Download APK directly inside the app with real-time byte progress.
   Future<String?> downloadApk(
     String url, {
@@ -463,18 +489,8 @@ class AppUpdateService {
       } catch (_) {}
       final baseDir = (dirPath != null && dirPath.isNotEmpty) ? Directory(dirPath) : Directory.systemTemp;
       
-      // Clean up any stale or previous APKs to avoid storage bloat and version confusion
-      try {
-        if (baseDir.existsSync()) {
-          for (final entity in baseDir.listSync()) {
-            if (entity is File && entity.path.toLowerCase().endsWith('.apk')) {
-              try {
-                entity.deleteSync();
-              } catch (_) {}
-            }
-          }
-        }
-      } catch (_) {}
+      // Clean up previous APKs to avoid storage bloat
+      await cleanupCachedApks();
 
       final filename = (targetVersion.isNotEmpty && targetBuild > 0)
           ? 'shiei-kiosk-v$targetVersion-b$targetBuild.apk'
