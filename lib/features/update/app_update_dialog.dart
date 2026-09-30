@@ -232,9 +232,71 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
     } else {
       setState(() {
         _isDownloading = false;
-        _errorMessage = 'Gagal mengunduh berkas APK dari server. Pastikan koneksi ke server sekolah aktif.';
+        _errorMessage = 'Gagal mengunduh berkas APK. Tautan unduhan mungkin tidak dapat diakses secara publik (404/Private) atau koneksi internet terputus.';
         _statusText = 'Unduhan gagal.';
       });
+    }
+  }
+
+  Future<void> _showEmergencyBypassDialog() async {
+    final isDark = AppTheme.isDark(context);
+    final bypass = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.shield_outlined, color: AppTheme.dangerRed, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Akses Darurat Pengawas',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Pembaruan wajib gagal diunduh karena kendala jaringan atau tautan unduhan tidak dapat diakses.\n\nApakah pengawas mengizinkan siswa melewati pembaruan ini sementara waktu agar dapat mengikuti ujian?',
+          style: TextStyle(
+            fontSize: 12.5,
+            height: 1.4,
+            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Batal',
+              style: TextStyle(color: isDark ? AppTheme.textMuted : const Color(0xFF64748B)),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.dangerRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Izinkan Lewati (Darurat)', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (bypass == true && mounted) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -635,6 +697,85 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                     ),
                                   ),
                                 ),
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 10),
+                              Wrap(
+                                alignment: WrapAlignment.end,
+                                spacing: 8,
+                                runSpacing: 6,
+                                children: [
+                                  if (widget.updateInfo.downloadUrl.isNotEmpty)
+                                    InkWell(
+                                      onTap: () => AppUpdateService.instance.openDownloadUrl(widget.updateInfo.downloadUrl),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.open_in_browser_rounded,
+                                              size: 13,
+                                              color: isDark ? Colors.white70 : const Color(0xFF475569),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Buka di Browser',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: isDark ? Colors.white : const Color(0xFF334155),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  if (widget.updateInfo.forceUpdate)
+                                    InkWell(
+                                      onTap: _showEmergencyBypassDialog,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? AppTheme.dangerRed.withOpacity(0.25)
+                                              : const Color(0xFFFEE2E2),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: isDark
+                                                ? AppTheme.dangerRed.withOpacity(0.6)
+                                                : const Color(0xFFFCA5A5),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.shield_outlined,
+                                              size: 13,
+                                              color: AppTheme.dangerRed,
+                                            ),
+                                            const SizedBox(width: 5),
+                                            const Text(
+                                              'Akses Darurat Pengawas',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppTheme.dangerRed,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ],
