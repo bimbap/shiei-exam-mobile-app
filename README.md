@@ -7,7 +7,6 @@
 
 > **市衛 • 誠実を守り、規律ある試験へ。**  
 > *Project SHIEI • Menjaga Integritas, Mengawal Kejujuran Ujian.*  
-> Official Mascot: **Shiei-kun (市衛くん)**
 
 ---
 
