@@ -16,33 +16,21 @@
 
 ---
 
-## 🛡️ Anti-Cheating & Kiosk Security Suite
+## 🛡️ Core Capabilities & Architecture
 
-- **Hardened Kiosk Mode**: Screen pinning and full-screen enforcement to prevent switching apps or accessing home navigation during exams.
-- **Anti-Overlay & Floating Window Blocker**: Detects and neutralizes third-party floating assistance widgets, calculators, and screen recorders.
-- **Hardware & Peripherals Integrity**:
-  - Blocks active Bluetooth audio/headsets.
-  - Detects active phone calls and suppresses background interruptions.
-  - Restricts USB debugging and ADB developer bridge tampering.
-  - Monitored battery status and screen brightness diagnostics before exam entry.
-- **Emergency Sirens & Visual Flashers**: Immediate audio alarm and red strobe banner triggered if a violation or unauthorized app escape is attempted.
-- **Dual-Role Experience**:
-  - **Student Mode**: Distraction-free exam runner with automatic local state caching and offline answer resilience.
-  - **Teacher / Proctor Mode**: Complete mobile proctoring hub featuring QR scanner unblock, class transfers, instant time adjustments, and live student progress tracking.
-- **Universal Form Factor Support**: Optimized for standard smartphones, compact foldables/covers, and large tablets (`maxWidth: 600dp` sheets and adaptive grid layouts).
+- **Dedicated Kiosk Examination Shell**: Full-screen containment and session locking designed to prevent unintended disruptions and maintain a focused testing environment.
+- **Hardware & Environment Verification**: Comprehensive pre-flight system diagnostics to verify device readiness before exam authorization.
+- **Real-Time Proctor Coordination**: Instant mobile supervision tools for teachers, including QR-based verification, live schedule adjustments, and student progress monitoring.
+- **Offline Session Resilience**: Intelligent local answer caching ensuring exam continuity even in intermittent or disrupted school connectivity conditions.
+- **Universal Cross-Platform Experience**: Responsive layouts tailored for smartphones, compact foldables, and educational tablet workstations.
 
 ---
 
-## 🛠️ Requirements & Tech Stack
+## 🛠️ System Requirements
 
 - **Flutter SDK**: `^3.24.0`
 - **Dart SDK**: `^3.5.0`
-- **Target OS**: Android 7.0+ (API 24+) / iOS 14.0+
-- **Key Packages**:
-  - `http` & `dio` for secure REST communications
-  - `qr_code_scanner` / `mobile_scanner` for rapid student unblocking
-  - `screen_protector` for anti-screenshot & secure view rendering
-  - `wakelock_plus` for continuous display preservation
+- **Target Platforms**: Android 7.0+ (API 24+) / iOS 14.0+
 
 ---
 
