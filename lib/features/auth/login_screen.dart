@@ -366,9 +366,8 @@ class _LoginScreenState extends State<LoginScreen> {
       AppNotification.showWarning(
         context,
         'Server Belum Dikonfigurasi',
-        subtitle: 'Silakan masukkan alamat IP atau domain server ujian sekolah Anda.',
+        subtitle: 'Silakan klik ikon server di pojok kanan atas untuk mengatur alamat server ujian.',
       );
-      _showServerSettingsDialog();
       return;
     }
 
