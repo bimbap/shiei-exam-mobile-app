@@ -441,7 +441,8 @@ class AppUpdateService {
           : 'shiei-kiosk-update.apk';
       final savePath = '${baseDir.path}/$filename';
       final file = File(savePath);
-      if (file.existsSync() && file.lengthSync() > 1024 * 1024) {
+      // Require at least 40 MB to avoid treating corrupt or partial APKs as valid
+      if (file.existsSync() && file.lengthSync() > 40 * 1024 * 1024) {
         return savePath;
       }
     } catch (_) {}
@@ -509,8 +510,13 @@ class AppUpdateService {
         ),
       );
 
-      if (File(savePath).existsSync()) {
+      final downloaded = File(savePath);
+      // Validate the downloaded file is a plausible APK size (>= 40 MB)
+      if (downloaded.existsSync() && downloaded.lengthSync() > 40 * 1024 * 1024) {
         return savePath;
+      } else if (downloaded.existsSync()) {
+        // Partial/corrupt download — delete so next attempt re-downloads cleanly
+        try { downloaded.deleteSync(); } catch (_) {}
       }
     } catch (e) {
       debugPrint('[AppUpdateService] Direct APK download failed: $e');
