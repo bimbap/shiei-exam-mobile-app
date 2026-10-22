@@ -1211,13 +1211,13 @@ class ExamsMonitorTabState extends State<ExamsMonitorTab> with TickerProviderSta
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        isAutoRefresh ? 'Live Sync (' : 'Sync Manual',
+                        isAutoRefresh ? 'Live Sync (' : 'Sync Dijeda',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                           color: isAutoRefresh
                               ? (isDark ? const Color(0xFF34D399) : const Color(0xFF059669))
-                              : (isDark ? AppTheme.textSecondary : const Color(0xFF64748B)),
+                              : const Color(0xFFEA580C),
                         ),
                       ),
                       if (isAutoRefresh) ...[

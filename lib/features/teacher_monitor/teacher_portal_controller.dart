@@ -686,7 +686,20 @@ class TeacherPortalController extends ChangeNotifier {
     }
   }
 
-  Future<void> loadMonitoringData({bool silent = false, bool clearPrevious = false}) async {
+  Future<void> loadMonitoringData({bool silent = false, bool clearPrevious = false, bool force = false}) async {
+    // Respect user manual pause state on silent background refreshes
+    if (silent && !_autoRefresh && !force) {
+      return;
+    }
+
+    // Prevent rapid spamming / time counter jitter on fast tab switches (cooldown 3s)
+    if (silent && !force && _lastSyncTime != null) {
+      final elapsedMs = DateTime.now().difference(_lastSyncTime!).inMilliseconds;
+      if (elapsedMs < 3000) {
+        return;
+      }
+    }
+
     if (!silent) {
       _isRefreshing = true;
       if (clearPrevious) {
@@ -1754,6 +1767,7 @@ class TeacherPortalController extends ChangeNotifier {
     } else {
       syncCountdown.value = 5;
       _startAutoRefreshTimer();
+      loadMonitoringData(silent: true, force: true);
     }
     notifyListeners();
   }

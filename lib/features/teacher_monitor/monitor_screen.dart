@@ -310,6 +310,7 @@ class _MonitorScreenState extends State<MonitorScreen> with WidgetsBindingObserv
             ),
           ],
           onTap: (index) {
+            if (_currentTabIndex == index) return;
             setState(() {
               _currentTabIndex = index;
             });
