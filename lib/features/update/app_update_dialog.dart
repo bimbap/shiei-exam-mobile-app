@@ -67,6 +67,13 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   }
 
   Future<void> _startDirectDownloadAndInstall() async {
+    if (Platform.isIOS) {
+      if (widget.updateInfo.downloadUrl.isNotEmpty) {
+        await AppUpdateService.instance.openDownloadUrl(widget.updateInfo.downloadUrl);
+      }
+      return;
+    }
+
     // Check if target version APK is already cached on disk
     _cachedApkPath ??= await AppUpdateService.instance.getCachedApkPath(
       targetVersion: widget.updateInfo.latestVersion,
@@ -806,7 +813,9 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Pemasangan dilakukan langsung di aplikasi. Jika Android meminta konfirmasi izin, aktifkan "Izinkan dari sumber ini".',
+                              Platform.isIOS
+                                  ? 'Pembaruan aplikasi iOS dilakukan via TestFlight / App Store. Tekan tombol di bawah untuk membuka halaman pembaruan resmi.'
+                                  : 'Pemasangan dilakukan langsung di aplikasi. Jika Android meminta konfirmasi izin, aktifkan "Izinkan dari sumber ini".',
                               style: TextStyle(
                                 fontSize: 10.5,
                                 color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
@@ -841,11 +850,13 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                               height: 18,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : const Icon(Icons.download_rounded, size: 18),
+                          : Icon(Platform.isIOS ? Icons.open_in_new_rounded : Icons.download_rounded, size: 18),
                       label: Text(
                         _isDownloading
                             ? 'Sedang Mengunduh...'
-                            : (_downloadProgress == 1.0 ? 'Pasang Pembaruan Ulang' : 'Unduh & Pasang Sekarang'),
+                            : (Platform.isIOS
+                                ? 'Buka Halaman Pembaruan'
+                                : (_downloadProgress == 1.0 ? 'Pasang Pembaruan Ulang' : 'Unduh & Pasang Sekarang')),
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../auth/token_storage.dart';
@@ -250,7 +251,7 @@ class VolumeLockService {
       final String name = await _channel.invokeMethod('getDeviceName') ?? '';
       if (name.isNotEmpty) return name;
     } catch (_) {}
-    return 'Android Device';
+    return Platform.isIOS ? 'iPhone' : 'Android Device';
   }
 
   /**

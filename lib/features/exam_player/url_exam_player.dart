@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../../shared/theme/app_theme.dart';
@@ -43,6 +44,10 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW, // Allow HTTP/HTTPS media resources
             domStorageEnabled: true,
             databaseEnabled: true,
+            // iOS specific kiosk hardening
+            allowsBackForwardNavigationGestures: false, // Disables Safari edge-swipe gesture navigation
+            allowsLinkPreview: false, // Disables 3D Touch / Haptic preview popups on hyperlinks
+            isInspectable: kDebugMode, // Disables Safari Web Inspector in production release builds
           ),
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final uri = navigationAction.request.url;

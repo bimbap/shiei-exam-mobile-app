@@ -3,6 +3,7 @@ import UIKit
 import Network
 import CallKit
 import AVFoundation
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterStreamHandler {
@@ -69,7 +70,7 @@ import AVFoundation
         // iPhones do not support split-screen multitasking; return false
         result(false)
 
-      case "setKioskSystemBarsBlocked", "enterLockTask":
+      case "setKioskSystemBarsBlocked", "enterLockTask", "startLockTask":
         if #available(iOS 12.2, *) {
           UIAccessibility.requestGuidedAccessSession(enabled: true) { success in
             result(success)
@@ -78,7 +79,7 @@ import AVFoundation
           result(UIAccessibility.isGuidedAccessEnabled)
         }
 
-      case "exitLockTask":
+      case "exitLockTask", "stopLockTask":
         if #available(iOS 12.2, *) {
           UIAccessibility.requestGuidedAccessSession(enabled: false) { success in
             result(success)
@@ -115,11 +116,157 @@ import AVFoundation
       case "setOverlayProtection":
         result(true)
 
-      case "syncReminders":
+      case "detectFloatingWindowOrOverlay":
+        let hasExternal = UIScreen.screens.count > 1
+        result([
+          "has_overlay": hasExternal,
+          "reason": hasExternal ? "Layar eksternal / AirPlay terdeteksi" : ""
+        ])
+
+      case "resetOverlayTouchDetection":
+        result(nil)
+
+      case "wasRecentScreenshotKey":
+        result(false)
+
+      case "isBluetoothEnabled":
+        result(false)
+
+      case "getBatteryLevel":
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let level = UIDevice.current.batteryLevel
+        if level < 0 {
+          result(100)
+        } else {
+          result(Int(level * 100))
+        }
+
+      case "isDeviceCharging":
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        let state = UIDevice.current.batteryState
+        result(state == .charging || state == .full)
+
+      case "isExternalDisplayConnected":
+        result(UIScreen.screens.count > 1)
+
+      case "getScreenBrightness":
+        let brightness = Int(UIScreen.main.brightness * 100)
+        result(brightness)
+
+      case "setWindowBrightness":
+        if let args = call.arguments as? [String: Any],
+           let b = (args["brightness"] as? Double) ?? (args["brightness"] as? Int).map({ Double($0) }) {
+          UIScreen.main.brightness = CGFloat(b / 100.0)
+          result(true)
+        } else {
+          result(false)
+        }
+
+      case "getDeviceName":
+        result(UIDevice.current.name)
+
+      case "getDeviceId":
+        result(UIDevice.current.model)
+
+      case "getAndroidVersion":
+        result([
+          "sdk_int": 0,
+          "release": "iOS " + UIDevice.current.systemVersion
+        ])
+
+      case "isFridaDetected", "isUsbDebuggingEnabled":
+        result(false)
+
+      case "getUsbDebuggingStatus":
+        result([
+          "isAdbEnabled": false,
+          "isUsbConnected": false,
+          "isAdbActiveWithHost": false
+        ])
+
+      case "checkSecurityIntegrity":
+        let isJailbroken = self.checkJailbreak()
+        result([
+          "isRooted": isJailbroken,
+          "isFrida": false,
+          "isUsbDebugging": false,
+          "isSignatureValid": true,
+          "signatureHash": "IOS_BUNDLE",
+          "isDebug": false
+        ])
+
+      case "verifyAppSignature":
+        result("IOS_PROVISIONING_PROFILE")
+
+      case "openDeveloperSettings", "openBluetoothSettings", "openOverlaySettings":
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+          UIApplication.shared.open(url, options: [:], completionHandler: nil)
+          result(true)
+        } else {
+          result(false)
+        }
+
+      case "openBrowserUrl":
+        if let args = call.arguments as? [String: Any],
+           let urlString = args["url"] as? String,
+           let url = URL(string: urlString) {
+          UIApplication.shared.open(url, options: [:]) { success in
+            result(success)
+          }
+        } else {
+          result(false)
+        }
+
+      case "checkStoragePermission", "requestStoragePermission":
         result(true)
 
-      case "installApkUpdate":
-        // Android-specific APK installation; no-op on iOS
+      case "getAppCacheDir":
+        let cachePath = NSSearchPathForDirectoriesInDomains(.cachesDirectory, .userDomainMask, true).first ?? NSTemporaryDirectory()
+        result(cachePath)
+
+      case "saveFileToDownloads":
+        if let args = call.arguments as? [String: Any],
+           let filename = args["filename"] as? String,
+           let flutterData = args["bytes"] as? FlutterStandardTypedData {
+          let urls = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+          if let docUrl = urls.first {
+            let fileUrl = docUrl.appendingPathComponent(filename)
+            do {
+              try flutterData.data.write(to: fileUrl)
+              result(fileUrl.path)
+            } catch {
+              result(nil)
+            }
+          } else {
+            result(nil)
+          }
+        } else {
+          result(nil)
+        }
+
+      case "requestNotificationPermission":
+        if #available(iOS 10.0, *) {
+          UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            result(granted)
+          }
+        } else {
+          result(true)
+        }
+
+      case "isNotificationPermissionGranted":
+        if #available(iOS 10.0, *) {
+          UNUserNotificationCenter.current().getNotificationSettings { settings in
+            result(settings.authorizationStatus == .authorized)
+          }
+        } else {
+          result(true)
+        }
+
+      case "scheduleExamReminder", "cancelExamReminder", "syncReminders":
+        result(true)
+
+      case "installApkUpdate", "installApk", "canRequestPackageInstalls", "openInstallPermissionSettings":
+        // Android-specific installer operations; no-op on iOS
         result(false)
 
       default:
@@ -285,6 +432,7 @@ import AVFoundation
   // MARK: - Volume Management
   private func setVolumeHigh() {
     do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
       try AVAudioSession.sharedInstance().setActive(true)
     } catch {
       // Audio session activation error handling

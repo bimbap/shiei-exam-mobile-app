@@ -64,7 +64,7 @@ class AuthService {
     }
 
     return {
-      'device_name': deviceName.isNotEmpty ? deviceName : 'Android Device',
+      'device_name': deviceName.isNotEmpty ? deviceName : (Platform.isIOS ? 'iPhone' : 'Android Device'),
       'device_id': deviceId.isNotEmpty ? deviceId : 'UNKNOWN',
       'serial_number': serialNumber,
       'android_version': androidVersion,
