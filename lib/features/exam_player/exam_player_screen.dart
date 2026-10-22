@@ -787,8 +787,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
         body: Stack(
           children: [
             SafeArea(
-              top: false, // Anchor razor-thin custom status bar flush to the absolute top edge of the display
-              bottom: false,
+              top: Platform.isIOS,
+              bottom: Platform.isIOS,
               child: Column(
             children: [
               // Top Razor-Thin Kiosk Status Bar (Clock, WiFi/Network, and Battery)
