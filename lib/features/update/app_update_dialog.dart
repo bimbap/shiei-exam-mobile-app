@@ -814,7 +814,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                           Expanded(
                             child: Text(
                               Platform.isIOS
-                                  ? 'Pembaruan aplikasi iOS dilakukan via TestFlight / App Store. Tekan tombol di bawah untuk membuka halaman pembaruan resmi.'
+                                  ? 'Pembaruan aplikasi iOS telah tersedia. Tekan tombol di bawah untuk membuka halaman rilis dan pembaruan resmi.'
                                   : 'Pemasangan dilakukan langsung di aplikasi. Jika Android meminta konfirmasi izin, aktifkan "Izinkan dari sumber ini".',
                               style: TextStyle(
                                 fontSize: 10.5,
