@@ -267,7 +267,7 @@ import UserNotifications
           result(true)
         }
 
-      case "scheduleExamReminder", "cancelExamReminder", "syncReminders":
+      case "scheduleExamReminder", "cancelExamReminder", "cancelAllExamReminders", "syncReminders":
         result(true)
 
       case "installApkUpdate", "installApk", "canRequestPackageInstalls", "openInstallPermissionSettings":
