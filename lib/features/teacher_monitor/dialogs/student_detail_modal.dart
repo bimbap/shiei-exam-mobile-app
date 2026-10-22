@@ -512,7 +512,9 @@ class StudentDetailModal {
                     ),
                     if (androidVersion != null && androidVersion.isNotEmpty)
                       buildCompactRow(
-                        icon: Icons.android_rounded,
+                        icon: androidVersion.toLowerCase().contains('ios')
+                            ? Icons.apple
+                            : Icons.android_rounded,
                         label: 'Versi OS',
                         isDark: isDark,
                         valueWidget: Text(
@@ -800,7 +802,9 @@ class StudentDetailModal {
                     ),
                     if (androidVersion != null && androidVersion.isNotEmpty)
                       buildCompactRow(
-                        icon: Icons.android_rounded,
+                        icon: androidVersion.toLowerCase().contains('ios')
+                            ? Icons.apple
+                            : Icons.android_rounded,
                         label: 'Versi OS',
                         isDark: isDark,
                         valueWidget: Text(
