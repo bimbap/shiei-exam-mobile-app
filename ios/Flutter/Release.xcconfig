@@ -1,1 +1,4 @@
 #include "Generated.xcconfig"
+
+APP_DISPLAY_NAME=Shiei Exam
+PRODUCT_BUNDLE_IDENTIFIER=id.shiei.shieiKiosk

@@ -186,13 +186,18 @@ import UserNotifications
 
       case "checkSecurityIntegrity":
         let isJailbroken = self.checkJailbreak()
+        #if DEBUG
+        let isDebugBuild = true
+        #else
+        let isDebugBuild = false
+        #endif
         result([
           "isRooted": isJailbroken,
           "isFrida": false,
           "isUsbDebugging": false,
           "isSignatureValid": true,
           "signatureHash": "IOS_BUNDLE",
-          "isDebug": false
+          "isDebug": isDebugBuild
         ])
 
       case "verifyAppSignature":
@@ -389,7 +394,7 @@ import UserNotifications
 
   // MARK: - Jailbreak Detection
   private func checkJailbreak() -> Bool {
-    #if targetEnvironment(simulator)
+    #if targetEnvironment(simulator) || DEBUG
     return false
     #else
     let suspiciousPaths = [
