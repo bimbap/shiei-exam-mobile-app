@@ -13,6 +13,7 @@ class ApiEndpoints {
   // Student Operations
   static const String studentExams = '/student/exams';
   static String studentExamDetail(int linkId) => '/student/exams/$linkId';
+  static String verifyExamToken(int linkId) => '/student/exams/$linkId/verify-token';
   static const String recordProgress = '/student/progress';
   static const String phoneCallStatus = '/student/phone-call';
   static const String chargingStatus = '/student/charging-status';

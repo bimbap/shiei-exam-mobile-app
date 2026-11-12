@@ -18,6 +18,7 @@ import 'features/lockout/locked_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/teacher_monitor/monitor_screen.dart';
+import 'features/update/app_update_dialog.dart';
 import 'features/update/changelog_screen.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/widgets/app_exit_dialog.dart';
@@ -40,6 +41,14 @@ void main() async {
       AppRoutes.login,
       (route) => false,
     );
+  };
+
+  // Enforce mandatory update dialog globally if backend rejects outdated client with HTTP 426
+  ApiClient.onForceUpdateRequired = (info) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx != null && ctx.mounted) {
+      AppUpdateDialog.show(ctx, info);
+    }
   };
 
   runApp(const ShieiExamApp());

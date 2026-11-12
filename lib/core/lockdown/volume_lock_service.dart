@@ -266,6 +266,17 @@ class VolumeLockService {
   }
 
   /**
+   * Get app-scoped hardware serial (Android Settings.Secure.ANDROID_ID).
+   */
+  static Future<String> getUniqueDeviceSerial() async {
+    try {
+      final String serial = await _channel.invokeMethod('getUniqueDeviceSerial') ?? '';
+      return serial.trim();
+    } catch (_) {}
+    return '';
+  }
+
+  /**
    * Get Android OS version info: sdk_int (API level) and release string (e.g. "14").
    */
   static Future<Map<String, dynamic>> getAndroidVersion() async {

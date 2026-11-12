@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../../config/app_config.dart';
 import '../../config/routes.dart';
 import '../../core/api/api_client.dart';
+import '../../core/auth/token_storage.dart';
+import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_exit_dialog.dart';
 import '../../shared/widgets/app_notification.dart';
 import '../../shared/widgets/shiei_brand_logo.dart';
+import '../update/app_update_dialog.dart';
 import 'login_controller.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -28,6 +31,19 @@ class _LoginScreenState extends State<LoginScreen> {
     AppExitDialog.resetLock();
     _nameController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLobbyAppVersion();
+    });
+  }
+
+  Future<void> _checkLobbyAppVersion() async {
+    try {
+      final info = await AppUpdateService.instance.checkForUpdate();
+      if (!mounted || info == null) return;
+      if (AppUpdateService.instance.isForceUpdateRequired(info) || info.hasUpdate) {
+        AppUpdateDialog.show(context, info);
+      }
+    } catch (_) {}
   }
 
   void _onFieldChanged() {
@@ -135,27 +151,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   return;
                 }
 
-                String formattedUrl = rawUrl;
-                if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-                  formattedUrl = 'http://$formattedUrl';
-                }
-
-                final uri = Uri.tryParse(formattedUrl);
-                if (uri == null || !uri.hasAuthority) {
+                final normalizedUrl = AppConfig.validateAndNormalizeServerUrl(rawUrl);
+                if (normalizedUrl == null) {
                   if (context.mounted) {
                     AppNotification.show(
                       context,
-                      title: 'Pengaturan Database Gagal Tersimpan',
-                      subtitle: 'Format URL server database tidak valid.',
+                      title: 'Alamat Server Ditolak',
+                      subtitle: 'Koneksi HTTP polos hanya diizinkan untuk IP jaringan lokal sekolah. Domain publik wajib HTTPS.',
                       type: NotificationType.error,
-                      duration: const Duration(milliseconds: 3200),
+                      duration: const Duration(milliseconds: 4000),
                     );
                   }
                   return;
                 }
 
                 try {
-                  AppConfig.setCustomBaseUrl(formattedUrl);
+                  if (normalizedUrl != AppConfig.baseUrl) {
+                    await TokenStorage.clear();
+                  }
+                  AppConfig.setCustomBaseUrl(normalizedUrl);
 
                   // 1. Notifikasi pertama: Pengaturan database berhasil tersimpan
                   if (context.mounted) {

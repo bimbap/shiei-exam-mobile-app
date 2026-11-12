@@ -1,0 +1,13 @@
+# Copy this file to `android/key.properties` (NEVER commit `key.properties` or `.jks`/`.keystore` to git).
+# Generate a release keystore if you do not have one yet:
+#   keytool -genkey -v -keystore android/app/shiei-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias shiei
+# Print the SHA-256 certificate fingerprint (without colons for signingSha256):
+#   keytool -list -v -keystore android/app/shiei-release.jks -alias shiei
+
+storePassword=CHANGE_ME_STORE_PASSWORD
+keyPassword=CHANGE_ME_KEY_PASSWORD
+keyAlias=shiei
+storeFile=shiei-release.jks
+# Optional but strongly recommended: 64-char SHA-256 fingerprint (no colons) to pin against APK repacking
+signingSha256=
+

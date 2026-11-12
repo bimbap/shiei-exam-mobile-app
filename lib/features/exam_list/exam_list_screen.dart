@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -84,7 +85,9 @@ class _ExamListScreenState extends State<ExamListScreen> {
       if (!mounted) return;
 
       // If there is an app update, show update dialog only! The tour must not show.
-      if (updateInfo != null && updateInfo.hasUpdate) {
+      if (updateInfo != null &&
+          (AppUpdateService.instance.isForceUpdateRequired(updateInfo) ||
+              updateInfo.hasUpdate)) {
         AppUpdateDialog.show(context, updateInfo);
         return;
       }
@@ -1133,18 +1136,21 @@ class _ExamListScreenState extends State<ExamListScreen> {
     await _showPreFlightDiagnosticsModal(exam);
   }
 
-  void _processExamLaunch(Map<String, dynamic> exam) {
-    final pendingUpdate = AppUpdateService.instance.latestUpdateInfo;
-    if (pendingUpdate != null && pendingUpdate.forceUpdate) {
+  Future<void> _processExamLaunch(Map<String, dynamic> exam) async {
+    final pendingUpdate = AppUpdateService.instance.latestUpdateInfo ??
+        await AppUpdateService.instance.checkForUpdate();
+    if (!mounted) return;
+    if (pendingUpdate != null && AppUpdateService.instance.isForceUpdateRequired(pendingUpdate)) {
       AppUpdateDialog.show(context, pendingUpdate);
       return;
     }
 
     final rawToken = exam['token'];
     final tokenMode = exam['token_mode'];
-    final bool requiresToken = rawToken != null &&
-        rawToken.toString().trim().isNotEmpty &&
-        tokenMode != 'none';
+    final bool requiresToken = (exam['requires_token'] == true) ||
+        (rawToken != null &&
+            rawToken.toString().trim().isNotEmpty &&
+            tokenMode != 'none');
 
     if (!requiresToken) {
       _launchExam(exam);
@@ -1170,7 +1176,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
   void _showTokenModal(Map<String, dynamic> exam) {
     final tokenController = TextEditingController();
     String? tokenError;
-    final expectedToken = (exam['token'] ?? '').toString().trim().toUpperCase();
+    bool isVerifying = false;
 
     showDialog(
       context: context,
@@ -1218,6 +1224,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                     TextField(
                       controller: tokenController,
                       autofocus: true,
+                      enabled: !isVerifying,
                       textAlign: TextAlign.center,
                       onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                       textCapitalization: TextCapitalization.characters,
@@ -1253,12 +1260,13 @@ class _ExamListScreenState extends State<ExamListScreen> {
                         }
                       },
                       onSubmitted: (val) {
+                        if (isVerifying) return;
                         _validateAndSubmitToken(
                           val,
-                          expectedToken,
                           exam,
                           ctx,
                           setModalState,
+                          (loading) => isVerifying = loading,
                           (err) => tokenError = err,
                         );
                       },
@@ -1267,7 +1275,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(ctx),
+                    onPressed: isVerifying ? null : () => Navigator.pop(ctx),
                     child: Text(
                       'Batal',
                       style: TextStyle(color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B)),
@@ -1280,17 +1288,25 @@ class _ExamListScreenState extends State<ExamListScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     ),
-                    onPressed: () {
-                      _validateAndSubmitToken(
-                        tokenController.text,
-                        expectedToken,
-                        exam,
-                        ctx,
-                        setModalState,
-                        (err) => tokenError = err,
-                      );
-                    },
-                    child: const Text('Mulai Ujian'),
+                    onPressed: isVerifying
+                        ? null
+                        : () {
+                            _validateAndSubmitToken(
+                              tokenController.text,
+                              exam,
+                              ctx,
+                              setModalState,
+                              (loading) => isVerifying = loading,
+                              (err) => tokenError = err,
+                            );
+                          },
+                    child: isVerifying
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Mulai Ujian'),
                   ),
                 ],
               ),
@@ -1301,14 +1317,14 @@ class _ExamListScreenState extends State<ExamListScreen> {
     );
   }
 
-  void _validateAndSubmitToken(
+  Future<void> _validateAndSubmitToken(
     String input,
-    String expectedToken,
     Map<String, dynamic> exam,
     BuildContext dialogContext,
     void Function(void Function()) setModalState,
+    void Function(bool) setLoading,
     void Function(String?) setError,
-  ) {
+  ) async {
     final sanitizedInput = input.trim().toUpperCase();
 
     if (sanitizedInput.isEmpty) {
@@ -1318,13 +1334,66 @@ class _ExamListScreenState extends State<ExamListScreen> {
       return;
     }
 
-    if (sanitizedInput == expectedToken) {
-      Navigator.pop(dialogContext);
-      _launchExam(exam);
-    } else {
+    final rawExamId = exam['id'];
+    final examId = rawExamId is int ? rawExamId : int.tryParse(rawExamId?.toString() ?? '');
+    if (examId == null) {
       setModalState(() {
-        setError('Token ujian salah atau sudah kadaluarsa!');
+        setError('ID ujian tidak valid.');
       });
+      return;
+    }
+
+    setModalState(() {
+      setLoading(true);
+      setError(null);
+    });
+
+    try {
+      final res = await _api.post(
+        ApiEndpoints.verifyExamToken(examId),
+        data: {'token': sanitizedInput},
+      );
+      final body = res.data;
+      if (body is Map && body['status'] == 'success') {
+        final verifiedExam = Map<String, dynamic>.from(exam);
+        if (body['data'] is Map) {
+          (body['data'] as Map).forEach((k, v) {
+            if (v != null) verifiedExam[k.toString()] = v;
+          });
+        }
+        if (dialogContext.mounted) {
+          Navigator.pop(dialogContext);
+        }
+        if (mounted) {
+          _launchExam(verifiedExam);
+        }
+        return;
+      }
+
+      final msg = (body is Map ? body['message']?.toString() : null) ?? 'Token ujian salah atau sudah kadaluarsa!';
+      if (dialogContext.mounted) {
+        setModalState(() {
+          setLoading(false);
+          setError(msg);
+        });
+      }
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final serverMsg = (data is Map ? data['message']?.toString() : null) ??
+          'Gagal memverifikasi token ke server. Periksa koneksi Anda.';
+      if (dialogContext.mounted) {
+        setModalState(() {
+          setLoading(false);
+          setError(serverMsg);
+        });
+      }
+    } catch (_) {
+      if (dialogContext.mounted) {
+        setModalState(() {
+          setLoading(false);
+          setError('Gagal memverifikasi token ujian.');
+        });
+      }
     }
   }
 

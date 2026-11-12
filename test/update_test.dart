@@ -63,11 +63,53 @@ void main() {
     expect(changelogs.first.categories.first.name, equals('Fitur Baru'));
   });
 
-  test('openDownloadUrl dispatches platform channel call', () async {
-    final success = await AppUpdateService.instance.openDownloadUrl('http://example.com/app.apk');
+  test('openDownloadUrl dispatches HTTPS calls and rejects untrusted HTTP URLs', () async {
+    final rejected = await AppUpdateService.instance.openDownloadUrl('http://example.com/app.apk');
+    expect(rejected, isFalse);
+    expect(log.any((call) => call.method == 'openBrowserUrl'), isFalse);
+
+    final success = await AppUpdateService.instance.openDownloadUrl('https://example.com/app.apk');
     expect(success, isTrue);
     expect(log.any((call) => call.method == 'openBrowserUrl'), isTrue);
-    expect(log.firstWhere((call) => call.method == 'openBrowserUrl').arguments['url'], equals('http://example.com/app.apk'));
+    expect(log.firstWhere((call) => call.method == 'openBrowserUrl').arguments['url'], equals('https://example.com/app.apk'));
+  });
+
+  test('compareVersions and isForceUpdateRequired enforce minSupportedVersion and checksum parsing', () {
+    expect(AppUpdateService.compareVersions('2.5.0', '2.5.1'), lessThan(0));
+    expect(AppUpdateService.compareVersions('2.5.0', '2.5.0'), equals(0));
+    expect(AppUpdateService.compareVersions('2.6.0', '2.5.9'), greaterThan(0));
+
+    final enforcedByMinVersion = AppUpdateInfo.fromJson({
+      'client_version': '2.5.0',
+      'latest_version': '2.5.1',
+      'latest_build': 12,
+      'has_update': false,
+      'force_update': false,
+      'is_mandatory': false,
+      'min_supported_version': '2.5.1',
+      'checksum_sha256': 'A' * 64,
+      'download_url': 'https://example.com/shiei.apk',
+    });
+
+    expect(enforcedByMinVersion.checksumSha256, equals('a' * 64));
+    expect(AppUpdateService.instance.isForceUpdateRequired(enforcedByMinVersion), isTrue);
+
+    final optionalUpdate = AppUpdateInfo(
+      clientVersion: '2.5.0',
+      latestVersion: '2.5.1',
+      latestBuild: 12,
+      hasUpdate: true,
+      forceUpdate: false,
+      isMandatory: false,
+      minSupportedVersion: '2.4.0',
+      releaseDate: '12 November 2026',
+      releaseTitle: 'Optional Patch',
+      fileSize: '25 MB',
+      downloadUrl: 'https://example.com/shiei.apk',
+      highlights: const [],
+    );
+
+    expect(AppUpdateService.instance.isForceUpdateRequired(optionalUpdate), isFalse);
   });
 
   testWidgets('ChangelogScreen renders in dark theme', (tester) async {

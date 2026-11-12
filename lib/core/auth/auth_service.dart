@@ -44,23 +44,28 @@ class AuthService {
         if (androidVersion.isEmpty) {
           androidVersion = 'Android ${androidInfo.version.release} (API ${androidInfo.version.sdkInt})';
         }
-        serialNumber = androidInfo.id.isNotEmpty ? androidInfo.id : androidInfo.fingerprint;
+        // Avoid androidInfo.id (Build.ID firmware tag collides across identical models).
+        // Prefer ANDROID_ID (unique per device + signing key on Android 8+) with secure install ID fallback.
+        final nativeSerial = await VolumeLockService.getUniqueDeviceSerial();
+        if (nativeSerial.length >= 8 && nativeSerial.toLowerCase() != '9774d56d682e549c') {
+          serialNumber = 'AND-${nativeSerial.toUpperCase()}';
+        }
       } else if (Platform.isIOS) {
         final iosInfo = await _deviceInfo.iosInfo;
         if (deviceName.isEmpty) deviceName = iosInfo.name.isNotEmpty ? iosInfo.name : 'iPhone / iPad';
         if (deviceId.isEmpty) deviceId = iosInfo.utsname.machine.isNotEmpty ? iosInfo.utsname.machine : 'iOS';
         if (androidVersion.isEmpty) androidVersion = 'iOS ${iosInfo.systemVersion}';
-        serialNumber = iosInfo.identifierForVendor ?? 'IOS-UNKNOWN-DEVICE';
+        final vendorId = iosInfo.identifierForVendor?.trim() ?? '';
+        if (vendorId.isNotEmpty) {
+          serialNumber = 'IOS-${vendorId.toUpperCase()}';
+        }
       }
     } catch (_) {}
 
     if (serialNumber.isEmpty) {
-      final cached = await TokenStorage.getSerialNumber();
-      if (cached != null && cached.isNotEmpty) {
-        serialNumber = cached;
-      } else {
-        serialNumber = '$deviceId-${DateTime.now().millisecondsSinceEpoch}';
-      }
+      final installId = await TokenStorage.getOrCreateInstallationId();
+      final prefix = Platform.isIOS ? 'IOS' : 'DEV';
+      serialNumber = '$prefix-$installId';
     }
 
     return {

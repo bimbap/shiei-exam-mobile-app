@@ -35,6 +35,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Admin License State
   bool _isAdmin = false;
+  bool _isLoggedIn = false;
   Map<String, dynamic>? _schoolData;
   bool _isLoadingLicense = false;
   bool _showFullLicenseKey = false;
@@ -55,8 +56,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isAlarmBypass = await TokenStorage.isAntiAlarmBypassEnabled();
 
     // Determine admin role status and school context
+    final token = await TokenStorage.getToken();
     final role = await TokenStorage.getRole();
     final user = await TokenStorage.getUser();
+    final isLoggedIn = token != null && token.isNotEmpty;
     final isAdmin = (role?.toLowerCase() == 'school_admin' ||
             role?.toLowerCase() == 'super_admin' ||
             role?.toLowerCase() == 'admin') ||
@@ -77,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isScreenshotProtectionEnabled = isSec;
         _isAppExitBypassEnabled = isExitBypass;
         _isAntiAlarmBypassEnabled = isAlarmBypass;
+        _isLoggedIn = isLoggedIn;
         _isAdmin = isAdmin;
         _schoolData = school;
       });
@@ -130,6 +134,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveServerUrl() async {
     if (_isSavingServer) return;
 
+    if (_isLoggedIn && !_isAdmin) {
+      AppNotification.show(
+        context,
+        title: 'Akses Dibatasi',
+        subtitle: 'Logout terlebih dahulu sebelum mengubah alamat server sekolah.',
+        type: NotificationType.warning,
+        duration: const Duration(milliseconds: 3200),
+      );
+      return;
+    }
+
     final rawUrl = _serverUrlController.text.trim();
     if (rawUrl.isEmpty) {
       AppNotification.show(
@@ -142,38 +157,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    String formattedUrl = rawUrl;
-    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-      formattedUrl = 'http://$formattedUrl';
-    }
-
-    final uri = Uri.tryParse(formattedUrl);
-    if (uri == null || !uri.hasAuthority) {
+    final normalizedUrl = AppConfig.validateAndNormalizeServerUrl(rawUrl);
+    if (normalizedUrl == null) {
       AppNotification.show(
         context,
-        title: 'Pengaturan Database Gagal Tersimpan',
-        subtitle: 'Format URL server database tidak valid.',
+        title: 'Alamat Server Ditolak',
+        subtitle: 'Koneksi HTTP polos hanya diizinkan untuk IP jaringan lokal sekolah. Domain publik wajib HTTPS.',
         type: NotificationType.error,
-        duration: const Duration(milliseconds: 3200),
+        duration: const Duration(milliseconds: 4000),
       );
       return;
     }
 
     setState(() => _isSavingServer = true);
 
+    bool urlChanged = false;
     try {
-      AppConfig.setCustomBaseUrl(formattedUrl);
+      urlChanged = normalizedUrl != AppConfig.baseUrl;
+      if (urlChanged) {
+        await TokenStorage.clear();
+        if (mounted) {
+          setState(() {
+            _isLoggedIn = false;
+            _isAdmin = false;
+            _schoolData = null;
+          });
+        }
+      }
+      AppConfig.setCustomBaseUrl(normalizedUrl);
       _serverUrlController.text = AppConfig.baseUrl;
 
       // 1. Notifikasi pertama: Pengaturan database berhasil tersimpan
-      AppNotification.show(
-        context,
-        title: 'Pengaturan Database Berhasil Disimpan',
-        subtitle: AppConfig.baseUrl,
-        type: NotificationType.success,
-        duration: const Duration(milliseconds: 2500),
-      );
+      if (mounted) {
+        AppNotification.show(
+          context,
+          title: 'Pengaturan Database Berhasil Disimpan',
+          subtitle: urlChanged ? '${AppConfig.baseUrl} (Sesi lama dibersihkan)' : AppConfig.baseUrl,
+          type: NotificationType.success,
+          duration: const Duration(milliseconds: 2500),
+        );
+      }
     } catch (_) {
+      if (!mounted) return;
       setState(() => _isSavingServer = false);
       AppNotification.show(
         context,
@@ -341,12 +366,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _serverUrlController,
+                  enabled: !_isLoggedIn || _isAdmin,
                   onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: const InputDecoration(
-                    hintText: 'Contoh: 192.168.1.100:8000 atau exam.sekolah.sch.id',
+                    hintText: 'Contoh: 192.168.1.100:8000 atau https://exam.sekolah.sch.id',
                     prefixIcon: Icon(Icons.link_rounded, color: AppTheme.primaryGlow),
                   ),
                 ),
+                if (_isLoggedIn && !_isAdmin) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Alamat server dikunci selama sesi aktif. Logout dulu untuk mengganti server.',
+                    style: TextStyle(fontSize: 11, color: textColor),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -368,7 +401,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
-                  onPressed: _isSavingServer ? null : _saveServerUrl,
+                  onPressed: (_isSavingServer || (_isLoggedIn && !_isAdmin)) ? null : _saveServerUrl,
                 ),
               ],
             ),

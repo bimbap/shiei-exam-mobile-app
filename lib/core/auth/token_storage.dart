@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -8,6 +9,7 @@ class TokenStorage {
   static const String _keyToken = 'auth_token';
   static const String _keyUser = 'auth_user';
   static const String _keySerial = 'device_serial';
+  static const String _keyInstallId = 'shiei_device_install_id';
   static const String _keyRole = 'auth_role';
   static const String _keySessionTimestamp = 'session_timestamp';
 
@@ -53,6 +55,19 @@ class TokenStorage {
 
   static Future<String?> getSerialNumber() async {
     return await _storage.read(key: _keySerial);
+  }
+
+  /// Returns a persistent cryptographic per-installation identifier stored in Keystore/Keychain.
+  static Future<String> getOrCreateInstallationId() async {
+    final existing = await _storage.read(key: _keyInstallId);
+    if (existing != null && existing.trim().length >= 16) {
+      return existing.trim();
+    }
+    final rng = Random.secure();
+    final bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+    final generated = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
+    await _storage.write(key: _keyInstallId, value: generated);
+    return generated;
   }
 
   static const String _keyScreenshotProtection = 'screenshot_protection_enabled';

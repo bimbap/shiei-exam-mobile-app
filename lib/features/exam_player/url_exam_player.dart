@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import '../../config/app_config.dart';
 import '../../shared/theme/app_theme.dart';
 
 class UrlExamPlayer extends StatefulWidget {
@@ -15,6 +16,79 @@ class UrlExamPlayer extends StatefulWidget {
     this.onControllerCreated,
   });
 
+  static const Set<String> _trustedExamHosts = {
+    'docs.google.com',
+    'drive.google.com',
+    'forms.gle',
+    'accounts.google.com',
+    'googleusercontent.com',
+    'gstatic.com',
+    'googleapis.com',
+    'youtube.com',
+    'youtube-nocookie.com',
+    'youtu.be',
+    'wikimedia.org',
+    'cloudinary.com',
+  };
+
+  static bool _hostMatchesDomain(String host, String domain) {
+    if (domain.isEmpty || host.isEmpty) return false;
+    return host == domain || host.endsWith('.$domain');
+  }
+
+  /// Validates WebView navigation URLs against allowed schemes, local-only HTTP, and trusted host rules.
+  static bool isUrlAllowed(String candidateUrl, String examUrl, {bool isMainFrame = true}) {
+    final uri = Uri.tryParse(candidateUrl.trim());
+    if (uri == null || uri.scheme.isEmpty) return false;
+
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme != 'https' && scheme != 'http') {
+      return false;
+    }
+
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+
+    // Plain HTTP is strictly allowed only for local/private network servers.
+    if (scheme == 'http' && !AppConfig.isLocalOrPrivateHost(host)) {
+      return false;
+    }
+
+    // Subresources / embedded frames must stay on valid http(s), never external cleartext or custom schemes.
+    if (!isMainFrame) {
+      return true;
+    }
+
+    final examUri = Uri.tryParse(examUrl.trim());
+    final examHost = examUri?.host.toLowerCase() ?? '';
+    final isExamHost = examHost.isNotEmpty && _hostMatchesDomain(host, examHost);
+    final isAnchor = examUri != null && uri.fragment.isNotEmpty && uri.path == examUri.path && host == examHost;
+    final isTrustedProvider = _trustedExamHosts.any((domain) => _hostMatchesDomain(host, domain));
+
+    return isExamHost || isAnchor || isTrustedProvider;
+  }
+
+  /// Removes locally cached shiei_autosave_* form drafts after exam completion.
+  static Future<void> clearAutosaveStorage(InAppWebViewController? controller) async {
+    if (controller == null) return;
+    try {
+      await controller.evaluateJavascript(source: """
+        (function() {
+          try {
+            var toDelete = [];
+            for (var i = 0; i < localStorage.length; i++) {
+              var k = localStorage.key(i);
+              if (k && k.indexOf('shiei_autosave_') === 0) toDelete.push(k);
+            }
+            for (var j = 0; j < toDelete.length; j++) {
+              localStorage.removeItem(toDelete[j]);
+            }
+          } catch(e) {}
+        })();
+      """);
+    } catch (_) {}
+  }
+
   @override
   State<UrlExamPlayer> createState() => _UrlExamPlayerState();
 }
@@ -27,6 +101,10 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final examInitialUri = Uri.tryParse(widget.url);
+    final allowLocalMixedContent =
+        examInitialUri != null && AppConfig.isLocalOrPrivateHost(examInitialUri.host);
+
     return Stack(
       children: [
         InAppWebView(
@@ -41,7 +119,9 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
             transparentBackground: false,
             allowsInlineMediaPlayback: true, // Essential for teacher audio listening and video clips
             mediaPlaybackRequiresUserGesture: false, // Smooth audio/video start
-            mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW, // Allow HTTP/HTTPS media resources
+            mixedContentMode: allowLocalMixedContent
+                ? MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE
+                : MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
             domStorageEnabled: true,
             databaseEnabled: true,
             // iOS specific kiosk hardening
@@ -51,40 +131,17 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
           ),
           shouldOverrideUrlLoading: (controller, navigationAction) async {
             final uri = navigationAction.request.url;
-            if (uri == null) return NavigationActionPolicy.ALLOW;
+            if (uri == null) return NavigationActionPolicy.CANCEL;
 
-            // 1. Media Subresources (diagrams, audio listening clips, Google Drive streams, CDN videos, iframes)
-            // MUST ALWAYS BE ALLOWED so questions render completely.
-            if (!navigationAction.isForMainFrame) {
+            if (UrlExamPlayer.isUrlAllowed(
+              uri.toString(),
+              widget.url,
+              isMainFrame: navigationAction.isForMainFrame,
+            )) {
               return NavigationActionPolicy.ALLOW;
             }
 
-            // 2. Main Frame Navigation (top-level page):
-            // Check if navigation stays within exam domain or permitted media/form embed hosts
-            final examUri = WebUri(widget.url);
-            final host = uri.host.toLowerCase();
-            final examHost = examUri.host.toLowerCase();
-
-            final isExamHost = host == examHost || (examHost.isNotEmpty && host.endsWith('.$examHost'));
-            final isAnchor = uri.fragment.isNotEmpty && uri.path == examUri.path;
-
-            // Trusted educational media and form providers placed by teachers
-            final isTrustedProvider = host.endsWith('google.com') ||
-                host.endsWith('googleapis.com') ||
-                host.endsWith('gstatic.com') ||
-                host.endsWith('drive.google.com') ||
-                host.endsWith('docs.google.com') ||
-                host.endsWith('youtube.com') ||
-                host.endsWith('youtu.be') ||
-                host.endsWith('wikimedia.org') ||
-                host.endsWith('cloudinary.com') ||
-                host.endsWith('amazonaws.com');
-
-            if (isExamHost || isAnchor || isTrustedProvider) {
-              return NavigationActionPolicy.ALLOW;
-            }
-
-            // Block external browsing attempt outside authorized exam scope
+            // Block external browsing, non-http(s) schemes, or public HTTP attempts outside exam scope
             debugPrint('[UrlExamPlayer] Blocked unauthorized navigation attempt to: $uri');
             return NavigationActionPolicy.CANCEL;
           },

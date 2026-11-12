@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../../config/app_config.dart';
 import '../api/api_client.dart';
 
 class AppUpdateInfo {
@@ -16,6 +17,7 @@ class AppUpdateInfo {
   final String releaseTitle;
   final String fileSize;
   final String downloadUrl;
+  final String? checksumSha256;
   final List<String> highlights;
 
   AppUpdateInfo({
@@ -30,10 +32,12 @@ class AppUpdateInfo {
     required this.releaseTitle,
     required this.fileSize,
     required this.downloadUrl,
+    this.checksumSha256,
     required this.highlights,
   });
 
   factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
+    final rawSha = json['checksum_sha256']?.toString().trim().toLowerCase();
     return AppUpdateInfo(
       clientVersion: json['client_version'] as String? ?? '1.0.0',
       latestVersion: json['latest_version'] as String? ?? '2.4.0',
@@ -46,6 +50,7 @@ class AppUpdateInfo {
       releaseTitle: json['release_title'] as String? ?? 'Pembaruan Kiosk',
       fileSize: json['file_size'] as String? ?? '25.4 MB',
       downloadUrl: json['download_url'] as String? ?? '',
+      checksumSha256: (rawSha != null && rawSha.isNotEmpty) ? rawSha : null,
       highlights: (json['highlights'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
     );
   }
@@ -379,6 +384,94 @@ class AppUpdateService {
   ];
 
   AppUpdateInfo? latestUpdateInfo;
+  String? lastDownloadError;
+
+  static final RegExp _sha256HexPattern = RegExp(r'^[a-f0-9]{64}$');
+
+  /// Compare dotted semantic versions (e.g. "2.5.0" vs "2.4.9").
+  static int compareVersions(String a, String b) {
+    List<int> parseParts(String raw) {
+      final cleaned = raw.split('-').first.split('+').first.trim();
+      return cleaned.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    }
+
+    final pa = parseParts(a);
+    final pb = parseParts(b);
+    final maxLen = pa.length > pb.length ? pa.length : pb.length;
+    for (int i = 0; i < maxLen; i++) {
+      final va = i < pa.length ? pa[i] : 0;
+      final vb = i < pb.length ? pb[i] : 0;
+      if (va != vb) return va.compareTo(vb);
+    }
+    return 0;
+  }
+
+  /// True when update policy requires blocking lobby access until updated.
+  bool isForceUpdateRequired(AppUpdateInfo info) {
+    final belowMinSupported = compareVersions(currentAppVersion, info.minSupportedVersion) < 0;
+    return info.forceUpdate || belowMinSupported || (info.hasUpdate && info.isMandatory);
+  }
+
+  bool _isValidDownloadUri(String rawUrl) {
+    final uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || !uri.hasAuthority || uri.host.trim().isEmpty) return false;
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'https') return true;
+    if (scheme == 'http' && AppConfig.isLocalOrPrivateHost(uri.host)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _hasApkMagicHeader(File file) {
+    RandomAccessFile? raf;
+    try {
+      if (!file.existsSync() || file.lengthSync() < 5 * 1024 * 1024) return false;
+      raf = file.openSync(mode: FileMode.read);
+      final bytes = raf.readSync(4);
+      return bytes.length == 4 && bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04;
+    } catch (_) {
+      return false;
+    } finally {
+      try {
+        raf?.closeSync();
+      } catch (_) {}
+    }
+  }
+
+  /// Compute lowercase SHA-256 hex digest of a local file via native streaming implementation.
+  Future<String?> computeFileSha256(String filePath) async {
+    try {
+      final hash = await _platformChannel.invokeMethod<String>('verifyFileSha256', {'filePath': filePath});
+      return hash?.trim().toLowerCase();
+    } catch (e) {
+      debugPrint('[AppUpdateService] Native SHA-256 check error: $e');
+      return null;
+    }
+  }
+
+  /// Verify downloaded/cached APK integrity against expected SHA-256 checksum.
+  Future<bool> verifyApkIntegrity(String filePath, String? expectedSha256) async {
+    final file = File(filePath);
+    if (!_hasApkMagicHeader(file)) {
+      lastDownloadError = 'Berkas APK tidak valid atau korup (header arsip tidak sesuai).';
+      return false;
+    }
+
+    final normalizedExpected = expectedSha256?.trim().toLowerCase() ?? '';
+    if (!_sha256HexPattern.hasMatch(normalizedExpected)) {
+      lastDownloadError = 'Checksum SHA-256 rilis belum tersedia dari server/Exam Manager. Instalasi otomatis dibatalkan demi keamanan.';
+      return false;
+    }
+
+    final actualHash = await computeFileSha256(filePath);
+    if (actualHash == null || actualHash != normalizedExpected) {
+      lastDownloadError = 'Verifikasi integritas SHA-256 gagal! Berkas APK tidak cocok dengan rilis resmi dan telah dihapus.';
+      return false;
+    }
+
+    return true;
+  }
 
   /// Check for a newer version from the dev/backend server.
   Future<AppUpdateInfo?> checkForUpdate({
@@ -424,10 +517,12 @@ class AppUpdateService {
     return fallbackChangelogs;
   }
 
-  /// Get the cached downloaded APK file path if it exists on disk and matches target version/build.
+  /// Get the cached downloaded APK file path if it exists on disk, matches target version/build,
+  /// and passes ZIP + SHA-256 integrity checks.
   Future<String?> getCachedApkPath({
     String targetVersion = '',
     int targetBuild = 0,
+    String? expectedSha256,
   }) async {
     try {
       String? dirPath;
@@ -435,15 +530,20 @@ class AppUpdateService {
         dirPath = await _platformChannel.invokeMethod<String>('getAppCacheDir');
       } catch (_) {}
       final baseDir = (dirPath != null && dirPath.isNotEmpty) ? Directory(dirPath) : Directory.systemTemp;
-      
+
       final filename = (targetVersion.isNotEmpty && targetBuild > 0)
           ? 'shiei-kiosk-v$targetVersion-b$targetBuild.apk'
           : 'shiei-kiosk-update.apk';
       final savePath = '${baseDir.path}/$filename';
       final file = File(savePath);
-      // Require at least 40 MB to avoid treating corrupt or partial APKs as valid
-      if (file.existsSync() && file.lengthSync() > 40 * 1024 * 1024) {
-        return savePath;
+      if (file.existsSync()) {
+        final isIntact = await verifyApkIntegrity(savePath, expectedSha256);
+        if (isIntact) {
+          return savePath;
+        }
+        try {
+          file.deleteSync();
+        } catch (_) {}
       }
     } catch (_) {}
     return null;
@@ -475,21 +575,37 @@ class AppUpdateService {
     }
   }
 
-  /// Download APK directly inside the app with real-time byte progress.
+  /// Download APK directly inside the app with real-time byte progress and SHA-256 verification.
   Future<String?> downloadApk(
     String url, {
     String targetVersion = '',
     int targetBuild = 0,
+    String? expectedSha256,
     required void Function(int received, int total) onProgress,
   }) async {
-    if (url.isEmpty) return null;
+    lastDownloadError = null;
+    if (url.isEmpty) {
+      lastDownloadError = 'Tautan unduhan pembaruan kosong.';
+      return null;
+    }
+    if (!_isValidDownloadUri(url)) {
+      lastDownloadError = 'Tautan unduhan harus menggunakan HTTPS (kecuali server sekolah lokal yang terkonfigurasi).';
+      return null;
+    }
+
+    final normalizedExpected = expectedSha256?.trim().toLowerCase() ?? '';
+    if (!_sha256HexPattern.hasMatch(normalizedExpected)) {
+      lastDownloadError = 'Checksum SHA-256 rilis belum tersedia dari server/Exam Manager. Instalasi otomatis dibatalkan demi keamanan.';
+      return null;
+    }
+
     try {
       String? dirPath;
       try {
         dirPath = await _platformChannel.invokeMethod<String>('getAppCacheDir');
       } catch (_) {}
       final baseDir = (dirPath != null && dirPath.isNotEmpty) ? Directory(dirPath) : Directory.systemTemp;
-      
+
       // Clean up previous APKs to avoid storage bloat
       await cleanupCachedApks();
 
@@ -511,15 +627,16 @@ class AppUpdateService {
       );
 
       final downloaded = File(savePath);
-      // Validate the downloaded file is a plausible APK size (>= 40 MB)
-      if (downloaded.existsSync() && downloaded.lengthSync() > 40 * 1024 * 1024) {
+      if (downloaded.existsSync() && await verifyApkIntegrity(savePath, normalizedExpected)) {
         return savePath;
-      } else if (downloaded.existsSync()) {
-        // Partial/corrupt download — delete so next attempt re-downloads cleanly
+      }
+      if (downloaded.existsSync()) {
+        // Corrupt, incomplete, or checksum mismatch — delete immediately
         try { downloaded.deleteSync(); } catch (_) {}
       }
     } catch (e) {
       debugPrint('[AppUpdateService] Direct APK download failed: $e');
+      lastDownloadError = 'Gagal mengunduh berkas APK. Periksa tautan rilis atau koneksi internet.';
     }
     return null;
   }
@@ -558,7 +675,7 @@ class AppUpdateService {
 
   /// Launch APK download URL in browser (fallback).
   Future<bool> openDownloadUrl(String url) async {
-    if (url.isEmpty) return false;
+    if (url.isEmpty || !_isValidDownloadUri(url)) return false;
     try {
       final success = await _platformChannel.invokeMethod<bool>('openBrowserUrl', {'url': url});
       return success ?? false;

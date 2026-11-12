@@ -597,6 +597,10 @@ class MainActivity : FlutterActivity() {
                     result.success(getHardwareDeviceId())
                 }
 
+                "getUniqueDeviceSerial" -> {
+                    result.success(getUniqueDeviceSerial())
+                }
+
                 "getAndroidVersion" -> {
                     result.success(mapOf(
                         "sdk_int" to Build.VERSION.SDK_INT,
@@ -611,9 +615,11 @@ class MainActivity : FlutterActivity() {
 
                 "openBrowserUrl" -> {
                     val url = call.argument<String>("url")
-                    if (!url.isNullOrBlank()) {
+                    val parsed = if (!url.isNullOrBlank()) android.net.Uri.parse(url.trim()) else null
+                    val scheme = parsed?.scheme?.lowercase(Locale.US)
+                    if (parsed != null && (scheme == "https" || scheme == "http")) {
                         try {
-                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            val intent = Intent(Intent.ACTION_VIEW, parsed)
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             startActivity(intent)
                             result.success(true)
@@ -887,6 +893,18 @@ class MainActivity : FlutterActivity() {
                         val res = checkSecurityIntegrity()
                         runOnUiThread { result.success(res) }
                     }.start()
+                }
+
+                "verifyFileSha256" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath.isNullOrBlank()) {
+                        result.success(null)
+                    } else {
+                        Thread {
+                            val hash = computeFileSha256(filePath)
+                            runOnUiThread { result.success(hash) }
+                        }.start()
+                    }
                 }
 
                 else -> result.notImplemented()
@@ -1175,6 +1193,14 @@ class MainActivity : FlutterActivity() {
             Build.MODEL ?: Build.DEVICE ?: "UNKNOWN"
         } catch (e: Exception) {
             "UNKNOWN"
+        }
+    }
+
+    private fun getUniqueDeviceSerial(): String {
+        return try {
+            Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)?.trim() ?: ""
+        } catch (_: Exception) {
+            ""
         }
     }
 
@@ -1602,6 +1628,25 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun computeFileSha256(filePath: String): String? {
+        return try {
+            val file = File(filePath)
+            if (!file.exists() || !file.isFile) return null
+            val md = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(65536)
+            file.inputStream().use { input ->
+                var read = input.read(buffer)
+                while (read > 0) {
+                    md.update(buffer, 0, read)
+                    read = input.read(buffer)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun isAppDebuggable(): Boolean {
         return (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
@@ -1614,10 +1659,16 @@ class MainActivity : FlutterActivity() {
         val isUsbConnected = isUsbConnectedToHost()
         val isAdbActiveWithHost = isAdb && isUsbConnected
         val sigHash = getAppSignatureHash()
+        val expectedSigHash = BuildConfig.EXPECTED_SIGNING_SHA256
+            .replace(":", "")
+            .trim()
+            .uppercase(Locale.US)
 
-        // In debug mode, allow developer signing. In release mode, signature must exist and not be empty.
+        // In debug mode, allow developer signing. In release mode, enforce pinned cert when configured.
         val isSignatureValid = if (isDebug) {
             true
+        } else if (expectedSigHash.isNotEmpty()) {
+            sigHash.isNotEmpty() && sigHash.equals(expectedSigHash, ignoreCase = true)
         } else {
             sigHash.isNotEmpty()
         }
@@ -1629,6 +1680,7 @@ class MainActivity : FlutterActivity() {
             "isUsbConnected" to isUsbConnected,
             "isAdbActiveWithHost" to isAdbActiveWithHost,
             "isSignatureValid" to isSignatureValid,
+            "isSignaturePinned" to expectedSigHash.isNotEmpty(),
             "signatureHash" to sigHash,
             "isDebug" to isDebug
         )

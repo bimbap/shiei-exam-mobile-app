@@ -214,7 +214,9 @@ import UserNotifications
       case "openBrowserUrl":
         if let args = call.arguments as? [String: Any],
            let urlString = args["url"] as? String,
-           let url = URL(string: urlString) {
+           let url = URL(string: urlString),
+           let scheme = url.scheme?.lowercased(),
+           (scheme == "https" || scheme == "http") {
           UIApplication.shared.open(url, options: [:]) { success in
             result(success)
           }

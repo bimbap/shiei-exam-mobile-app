@@ -14,20 +14,28 @@ class AppUpdateDialog extends StatefulWidget {
 
   static const _storage = FlutterSecureStorage();
   static String _dismissKey(String version) => 'update_dismissed_v$version';
+  static bool _isDialogOpen = false;
 
   /// Show the dialog only if the user hasn't dismissed this version before.
-  /// Force updates always show regardless.
+  /// Mandatory / min-supported-version updates always show and cannot be stacked or bypassed.
   static Future<void> show(BuildContext context, AppUpdateInfo updateInfo) async {
-    if (!updateInfo.forceUpdate) {
+    if (_isDialogOpen) return;
+    final bool isForced = AppUpdateService.instance.isForceUpdateRequired(updateInfo);
+    if (!isForced) {
       final dismissed = await _storage.read(key: _dismissKey(updateInfo.latestVersion));
       if (dismissed == 'true') return;
     }
     if (!context.mounted) return;
-    return showDialog(
-      context: context,
-      barrierDismissible: !updateInfo.forceUpdate,
-      builder: (ctx) => AppUpdateDialog(updateInfo: updateInfo),
-    );
+    _isDialogOpen = true;
+    try {
+      return await showDialog(
+        context: context,
+        barrierDismissible: !isForced,
+        builder: (ctx) => AppUpdateDialog(updateInfo: updateInfo),
+      );
+    } finally {
+      _isDialogOpen = false;
+    }
   }
 
   static Future<void> clearDismissed(String version) async {
@@ -40,12 +48,15 @@ class AppUpdateDialog extends StatefulWidget {
 
 class _AppUpdateDialogState extends State<AppUpdateDialog> {
   bool _isDownloading = false;
+  bool _isRechecking = false;
   double _downloadProgress = 0.0;
   int _totalBytes = 0;
   String? _errorMessage;
   String _statusText = 'Siap mengunduh pembaruan';
   String? _cachedApkPath;
   bool _doNotShowAgain = false;
+
+  bool get _isForceUpdate => AppUpdateService.instance.isForceUpdateRequired(widget.updateInfo);
 
   @override
   void initState() {
@@ -54,13 +65,14 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         .getCachedApkPath(
           targetVersion: widget.updateInfo.latestVersion,
           targetBuild: widget.updateInfo.latestBuild,
+          expectedSha256: widget.updateInfo.checksumSha256,
         )
         .then((path) {
       if (mounted && path != null) {
         setState(() {
           _cachedApkPath = path;
           _downloadProgress = 1.0;
-          _statusText = 'Berkas pembaruan v${widget.updateInfo.latestVersion} siap dipasang.';
+          _statusText = 'Berkas pembaruan v${widget.updateInfo.latestVersion} terverifikasi & siap dipasang.';
         });
       }
     });
@@ -74,10 +86,11 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       return;
     }
 
-    // Check if target version APK is already cached on disk
+    // Check if target version APK is already cached and SHA-256 verified on disk
     _cachedApkPath ??= await AppUpdateService.instance.getCachedApkPath(
       targetVersion: widget.updateInfo.latestVersion,
       targetBuild: widget.updateInfo.latestBuild,
+      expectedSha256: widget.updateInfo.checksumSha256,
     );
 
     // If APK is already downloaded, try to install directly without re-downloading
@@ -201,6 +214,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       widget.updateInfo.downloadUrl,
       targetVersion: widget.updateInfo.latestVersion,
       targetBuild: widget.updateInfo.latestBuild,
+      expectedSha256: widget.updateInfo.checksumSha256,
       onProgress: (received, total) {
         if (!mounted) return;
         setState(() {
@@ -226,7 +240,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       setState(() {
         _isDownloading = false;
         _downloadProgress = 1.0;
-        _statusText = 'Unduhan selesai! Membuka installer Android...';
+        _statusText = 'Unduhan & verifikasi SHA-256 selesai! Membuka installer Android...';
       });
 
       // Trigger native package installer
@@ -240,71 +254,35 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       await AppUpdateService.instance.cleanupCachedApks();
       setState(() {
         _isDownloading = false;
-        _errorMessage = 'Gagal mengunduh berkas APK. Tautan unduhan mungkin tidak dapat diakses secara publik (404/Private) atau koneksi internet terputus.';
-        _statusText = 'Unduhan gagal.';
+        _errorMessage = AppUpdateService.instance.lastDownloadError ??
+            'Gagal mengunduh atau memverifikasi berkas APK. Periksa tautan rilis atau koneksi internet.';
+        _statusText = 'Unduhan atau verifikasi gagal.';
       });
     }
   }
 
-  Future<void> _showEmergencyBypassDialog() async {
-    final isDark = AppTheme.isDark(context);
-    final bypass = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-          ),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.shield_outlined, color: AppTheme.dangerRed, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Akses Darurat Pengawas',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                ),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'Pembaruan wajib gagal diunduh karena kendala jaringan atau tautan unduhan tidak dapat diakses.\n\nApakah pengawas mengizinkan siswa melewati pembaruan ini sementara waktu agar dapat mengikuti ujian?',
-          style: TextStyle(
-            fontSize: 12.5,
-            height: 1.4,
-            color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              'Batal',
-              style: TextStyle(color: isDark ? AppTheme.textMuted : const Color(0xFF64748B)),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.dangerRed,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Izinkan Lewati (Darurat)', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _recheckVersionPolicy() async {
+    if (_isRechecking || _isDownloading) return;
+    setState(() {
+      _isRechecking = true;
+      _errorMessage = null;
+      _statusText = 'Memeriksa ulang kebijakan versi dari server...';
+    });
 
-    if (bypass == true && mounted) {
+    final latest = await AppUpdateService.instance.checkForUpdate();
+    if (!mounted) return;
+
+    setState(() => _isRechecking = false);
+    if (latest != null && !AppUpdateService.instance.isForceUpdateRequired(latest) && !latest.hasUpdate) {
       Navigator.of(context).pop();
+    } else if (latest == null) {
+      setState(() {
+        _errorMessage = 'Server belum merespons. Periksa koneksi Wi-Fi sekolah lalu coba lagi.';
+      });
+    } else {
+      setState(() {
+        _statusText = 'Pembaruan v${latest.latestVersion} masih diwajibkan oleh server.';
+      });
     }
   }
 
@@ -314,7 +292,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
     final isDark = AppTheme.isDark(context);
 
     return PopScope(
-      canPop: !updateInfo.forceUpdate && !_isDownloading,
+      canPop: !_isForceUpdate && !_isDownloading,
       child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -325,14 +303,14 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
             color: isDark ? const Color(0xFF0F172A) : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: updateInfo.forceUpdate
+              color: _isForceUpdate
                   ? AppTheme.dangerRed.withOpacity(isDark ? 0.7 : 0.5)
                   : (isDark ? AppTheme.primaryShiei.withOpacity(0.6) : const Color(0xFFFED7AA)),
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: updateInfo.forceUpdate
+                color: _isForceUpdate
                     ? AppTheme.dangerRed.withOpacity(isDark ? 0.25 : 0.15)
                     : (isDark ? AppTheme.primaryGlow.withOpacity(0.2) : const Color(0xFF0F172A).withOpacity(0.12)),
                 blurRadius: 28,
@@ -350,7 +328,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: updateInfo.forceUpdate
+                    colors: _isForceUpdate
                         ? (isDark
                             ? [AppTheme.dangerRed.withOpacity(0.35), const Color(0xFF0F172A)]
                             : [const Color(0xFFFEF2F2), Colors.white])
@@ -369,19 +347,19 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                       height: 48,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: updateInfo.forceUpdate
+                        color: _isForceUpdate
                             ? (isDark ? AppTheme.dangerRed.withOpacity(0.25) : const Color(0xFFFEE2E2))
                             : (isDark ? AppTheme.primaryShiei.withOpacity(0.25) : const Color(0xFFFFEDD5)),
                         border: Border.all(
-                          color: updateInfo.forceUpdate
+                          color: _isForceUpdate
                               ? AppTheme.dangerRed
                               : (isDark ? AppTheme.primaryGlow : const Color(0xFFF97316)),
                           width: 1.5,
                         ),
                       ),
                       child: Icon(
-                        updateInfo.forceUpdate ? Icons.security_rounded : Icons.system_update_alt_rounded,
-                        color: updateInfo.forceUpdate
+                        _isForceUpdate ? Icons.security_rounded : Icons.system_update_alt_rounded,
+                        color: _isForceUpdate
                             ? (isDark ? const Color(0xFFFCA5A5) : AppTheme.dangerRed)
                             : (isDark ? AppTheme.primaryGlow : const Color(0xFFEA580C)),
                         size: 26,
@@ -393,7 +371,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            updateInfo.forceUpdate ? 'Pembaruan Keamanan Wajib' : 'Pembaruan Tersedia',
+                            _isForceUpdate ? 'Pembaruan Keamanan Wajib' : 'Pembaruan Tersedia',
                             style: TextStyle(
                               fontSize: 16.5,
                               fontWeight: FontWeight.bold,
@@ -406,22 +384,22 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: updateInfo.forceUpdate
+                                  color: _isForceUpdate
                                       ? (isDark ? AppTheme.dangerRed.withOpacity(0.3) : const Color(0xFFFEE2E2))
                                       : (isDark ? AppTheme.primaryShiei.withOpacity(0.3) : const Color(0xFFFFEDD5)),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
-                                    color: updateInfo.forceUpdate
+                                    color: _isForceUpdate
                                         ? (isDark ? AppTheme.dangerRed.withOpacity(0.6) : const Color(0xFFFCA5A5))
                                         : (isDark ? AppTheme.primaryGlow.withOpacity(0.5) : const Color(0xFFFDBA74)),
                                   ),
                                 ),
                                 child: Text(
-                                  updateInfo.forceUpdate ? 'WAJIB v${updateInfo.latestVersion}' : 'v${updateInfo.latestVersion}',
+                                  _isForceUpdate ? 'WAJIB v${updateInfo.latestVersion}' : 'v${updateInfo.latestVersion}',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w800,
-                                    color: updateInfo.forceUpdate
+                                    color: _isForceUpdate
                                         ? (isDark ? const Color(0xFFFCA5A5) : const Color(0xFF991B1B))
                                         : (isDark ? AppTheme.primaryGlow : const Color(0xFFC2410C)),
                                   ),
@@ -480,7 +458,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                     const SizedBox(height: 12),
 
                     // Mandatory Warning Box
-                    if (updateInfo.forceUpdate) ...[
+                    if (_isForceUpdate) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
@@ -746,37 +724,33 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                                         ),
                                       ),
                                     ),
-                                  if (widget.updateInfo.forceUpdate)
+                                  if (_isForceUpdate)
                                     InkWell(
-                                      onTap: _showEmergencyBypassDialog,
+                                      onTap: _isRechecking ? null : _recheckVersionPolicy,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: isDark
-                                              ? AppTheme.dangerRed.withOpacity(0.25)
-                                              : const Color(0xFFFEE2E2),
+                                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
                                           borderRadius: BorderRadius.circular(8),
                                           border: Border.all(
-                                            color: isDark
-                                                ? AppTheme.dangerRed.withOpacity(0.6)
-                                                : const Color(0xFFFCA5A5),
+                                            color: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
                                           ),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            const Icon(
-                                              Icons.shield_outlined,
+                                            Icon(
+                                              Icons.refresh_rounded,
                                               size: 13,
-                                              color: AppTheme.dangerRed,
+                                              color: isDark ? Colors.white70 : const Color(0xFF475569),
                                             ),
                                             const SizedBox(width: 5),
-                                            const Text(
-                                              'Akses Darurat Pengawas',
+                                            Text(
+                                              _isRechecking ? 'Memeriksa...' : 'Cek Ulang Status',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.bold,
-                                                color: AppTheme.dangerRed,
+                                                color: isDark ? Colors.white : const Color(0xFF334155),
                                               ),
                                             ),
                                           ],
@@ -860,7 +834,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                         style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    if (!updateInfo.forceUpdate && !_isDownloading) ...[
+                    if (!_isForceUpdate && !_isDownloading) ...[
                       const SizedBox(height: 8),
                       // "Jangan tampilkan lagi" checkbox
                       InkWell(

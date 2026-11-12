@@ -1,13 +1,46 @@
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
+val releaseStoreFilePath = keystoreProperties.getProperty("storeFile")?.trim().orEmpty()
+val releaseStorePassword = keystoreProperties.getProperty("storePassword")?.trim().orEmpty()
+val releaseKeyAlias = keystoreProperties.getProperty("keyAlias")?.trim().orEmpty()
+val releaseKeyPassword = keystoreProperties.getProperty("keyPassword")?.trim().orEmpty()
+val releaseStoreFile = if (releaseStoreFilePath.isNotEmpty()) file(releaseStoreFilePath) else null
+val hasValidReleaseKeystore = releaseStoreFile != null &&
+    releaseStoreFile.exists() &&
+    releaseStorePassword.isNotEmpty() &&
+    releaseKeyAlias.isNotEmpty() &&
+    releaseKeyPassword.isNotEmpty()
+
+val expectedSigningSha256 = (
+    (project.findProperty("releaseSigningSha256") as String?)
+        ?: keystoreProperties.getProperty("signingSha256")
+        ?: ""
+).replace(":", "").trim().uppercase()
+
+val allowDebugReleaseSigning = (project.findProperty("allowDebugReleaseSigning") as String?)
+    ?.equals("true", ignoreCase = true) == true
+
 android {
     namespace = "id.shiei.kiosk_app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "28.2.13676358"
+
+    buildFeatures {
+        buildConfig = true
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,6 +61,18 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["appName"] = "Shiei Exam"
+        buildConfigField("String", "EXPECTED_SIGNING_SHA256", "\"$expectedSigningSha256\"")
+    }
+
+    signingConfigs {
+        if (hasValidReleaseKeystore) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
     }
 
     buildTypes {
@@ -44,8 +89,21 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = when {
+                hasValidReleaseKeystore -> signingConfigs.getByName("release")
+                allowDebugReleaseSigning -> {
+                    logger.warn("WARNING: Release APK is temporarily using debug signing (-PallowDebugReleaseSigning=true). Do NOT distribute this APK to students.")
+                    signingConfigs.getByName("debug")
+                }
+                else -> signingConfigs.getByName("debug").also {
+                    if (gradle.startParameter.taskNames.any { task -> task.contains("Release", ignoreCase = true) }) {
+                        throw GradleException(
+                            "Release signing keystore not configured. Create android/key.properties (see android/key.properties.example) " +
+                            "or pass -PallowDebugReleaseSigning=true for local non-production testing only."
+                        )
+                    }
+                }
+            }
         }
     }
 

@@ -1,8 +1,9 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../../config/app_config.dart';
 import '../auth/token_storage.dart';
-
-import 'package:flutter/foundation.dart';
+import '../update/app_update_service.dart';
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
@@ -10,6 +11,7 @@ class ApiClient {
 
   late final Dio dio;
   static VoidCallback? onSessionTerminated;
+  static void Function(AppUpdateInfo info)? onForceUpdateRequired;
 
   ApiClient._internal() {
     dio = Dio(
@@ -27,7 +29,19 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          if (!AppConfig.isAllowedServerBaseUrl(AppConfig.baseUrl)) {
+            return handler.reject(
+              DioException(
+                requestOptions: options,
+                type: DioExceptionType.badResponse,
+                error: 'Blocked cleartext HTTP request to non-local host: ${AppConfig.baseUrl}',
+              ),
+            );
+          }
           options.baseUrl = AppConfig.baseUrl;
+          options.headers['X-App-Version'] = AppUpdateService.currentAppVersion;
+          options.headers['X-App-Build'] = AppUpdateService.currentAppBuild.toString();
+          options.headers['X-App-Platform'] = Platform.isIOS ? 'ios' : (Platform.isWindows ? 'windows' : 'android');
           final token = await TokenStorage.getToken();
           if (token != null && token.isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
@@ -36,11 +50,25 @@ class ApiClient {
         },
         onError: (DioException error, handler) async {
           final path = error.requestOptions.path;
+          final statusCode = error.response?.statusCode;
+
+          if (statusCode == 426) {
+            final rawData = error.response?.data;
+            if (rawData is Map) {
+              final payload = rawData['data'] is Map
+                  ? Map<String, dynamic>.from(rawData['data'] as Map)
+                  : Map<String, dynamic>.from(rawData);
+              final info = AppUpdateInfo.fromJson(payload);
+              AppUpdateService.instance.latestUpdateInfo = info;
+              onForceUpdateRequired?.call(info);
+            }
+          }
+
           final isAuthEndpoint = path.contains('/auth/login') ||
               path.contains('/auth/student-login') ||
               path.contains('/auth/admin-login');
 
-          if (error.response?.statusCode == 401 && !isAuthEndpoint) {
+          if (statusCode == 401 && !isAuthEndpoint) {
             final token = await TokenStorage.getToken();
             final hasActiveToken = token != null && token.isNotEmpty;
             if (hasActiveToken) {

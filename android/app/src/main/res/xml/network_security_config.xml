@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+      Android does not support CIDR/IP-subnet wildcards (e.g. 192.168.*.*) inside <domain-config>.
+      To allow schools using dynamic LAN IP servers while blocking public HTTP exposure,
+      cleartext is permitted at the OS socket layer and strictly restricted to loopback/RFC1918
+      private IPs inside AppConfig, ApiClient, AppUpdateService, and UrlExamPlayer.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+

@@ -192,20 +192,32 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       return;
     }
 
-    // Pre-flight Step: Hardware device identity verification & auto-binding
+    // Pre-flight Step: Fail-closed hardware device identity verification & auto-binding
     try {
       _deviceDetails = await _auth.getDeviceDetails();
       final verifyRes = await _auth.verifyDevice();
-      if (verifyRes['status'] == 'error' && (verifyRes['message']?.toString().contains('does not match') ?? false)) {
+      if (verifyRes['status'] != 'success') {
+        final rawMsg = verifyRes['message']?.toString() ?? '';
+        final isMismatch = rawMsg.contains('does not match');
         if (mounted) {
           setState(() {
             _isHandshakeInProgress = false;
-            _handshakeErrorMessage = 'Perangkat tidak sesuai dengan HP yang terdaftar untuk akun ini.\nSilakan hubungi pengawas untuk mereset kunci perangkat.';
+            _handshakeErrorMessage = isMismatch
+                ? 'Perangkat tidak sesuai dengan HP yang terdaftar untuk akun ini.\nSilakan hubungi pengawas untuk mereset kunci perangkat.'
+                : 'Gagal memverifikasi otorisasi perangkat ke server monitoring sekolah.\nSilakan periksa koneksi dan tekan Coba Lagi.';
           });
         }
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isHandshakeInProgress = false;
+          _handshakeErrorMessage = 'Gagal menghubungi server verifikasi perangkat.\nSesi ujian tidak dapat dimulai tanpa verifikasi perangkat.';
+        });
+      }
+      return;
+    }
 
     final ok = await _recordProgress('in_progress');
     if (!mounted) return;
@@ -610,6 +622,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     _isSubmitting = true;
 
     _lockdown.stopExamMonitoring();
+    await UrlExamPlayer.clearAutosaveStorage(_webViewController);
     await _recordProgress('completed');
 
     if (mounted) {
@@ -731,6 +744,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
               Navigator.pop(ctx);
               _isSubmitting = true;
               _lockdown.stopExamMonitoring();
+              await UrlExamPlayer.clearAutosaveStorage(_webViewController);
               await _recordProgress('completed');
               if (mounted) {
                 Navigator.pop(context);

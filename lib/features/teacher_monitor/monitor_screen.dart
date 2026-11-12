@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../config/routes.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_exit_dialog.dart';
 import '../../shared/widgets/fluid_curved_bottom_bar.dart';
 import '../../shared/widgets/shiei_brand_logo.dart';
 import '../tour/proctor_tour_dialog.dart';
+import '../update/app_update_dialog.dart';
 import 'tabs/dashboard_tab.dart';
 import 'tabs/exams_monitor_tab.dart';
 import 'tabs/proctor_profile_tab.dart';
@@ -38,6 +40,16 @@ class _MonitorScreenState extends State<MonitorScreen> with WidgetsBindingObserv
 
     // Auto-launch proctor tour on first entrance after initial render
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final updateInfo = await AppUpdateService.instance.checkForUpdate();
+      if (!mounted) return;
+      if (updateInfo != null &&
+          (AppUpdateService.instance.isForceUpdateRequired(updateInfo) || updateInfo.hasUpdate)) {
+        AppUpdateDialog.show(context, updateInfo);
+        if (AppUpdateService.instance.isForceUpdateRequired(updateInfo)) {
+          return;
+        }
+      }
+
       final completed = await TokenStorage.isProctorTourCompleted(isAdmin: _controller.isAdmin);
       if (!completed && mounted) {
         _openTour(forceShow: false);
