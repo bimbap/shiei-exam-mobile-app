@@ -114,6 +114,7 @@ class LockdownService with WidgetsBindingObserver {
     // Do NOT falsely notify backend that charging stopped when device might still be physically plugged in!
     // The device hardware status poller handles notifying when the cable is physically detached.
 
+    final bool shouldRestorePreVolume = stopAlarm && !keepViolationFlag && !_isHandlingViolation;
     _isLockdownActive = false;
     _activeExamId = null;
     _currentContext = null;
@@ -126,10 +127,14 @@ class LockdownService with WidgetsBindingObserver {
     _isCharging = false;
     onPhoneCallChanged = null;
 
-    // Stop native Kiosk mode pinning, restore system brightness, and restore pre-exam device volume
+    // Stop native Kiosk mode pinning, restore system brightness, and conditionally restore pre-exam volume
+    // (only restore pre-exam volume on normal completion; keep 100% when caught cheating!).
     VolumeLockService.stopLockTask();
     VolumeLockService.setWindowBrightness(-1);
-    VolumeLockService.stopVolumeLock();
+    VolumeLockService.stopVolumeLock(
+      restoreVolume: shouldRestorePreVolume,
+      clearSnapshot: shouldRestorePreVolume,
+    );
 
     WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
@@ -180,7 +185,7 @@ class LockdownService with WidgetsBindingObserver {
     // while the call continues so students cannot switch tabs/apps during the call.
     if (isCall) {
       _needsRePinAfterCall = true;
-      await VolumeLockService.stopVolumeLock();
+      await VolumeLockService.stopVolumeLock(restoreVolume: true, clearSnapshot: false);
       await VolumeLockService.openCallControlWindow(durationMs: 10000);
     } else {
       _lastPhoneCallEndedAt = DateTime.now();

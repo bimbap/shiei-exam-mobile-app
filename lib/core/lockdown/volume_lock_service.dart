@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import '../auth/token_storage.dart';
 
 class VolumeLockService {
   static const MethodChannel _channel = MethodChannel('id.shiei/lockdown');
@@ -9,6 +11,9 @@ class VolumeLockService {
    * Native Android listener will override any volume reduction back to 100%.
    */
   static Future<void> startVolumeLock() async {
+    if (kDebugMode && await TokenStorage.isAntiAlarmBypassEnabled()) {
+      return;
+    }
     try {
       await _channel.invokeMethod('startVolumeLock');
     } catch (_) {
@@ -18,10 +23,18 @@ class VolumeLockService {
 
   /**
    * Deactivate hardware volume lock.
+   * [restoreVolume]: When true (default, e.g. normal exam completion), restores pre-exam volume.
+   * When false (e.g. violation lockout siren), keeps volume at 100% for the alarm.
    */
-  static Future<void> stopVolumeLock() async {
+  static Future<void> stopVolumeLock({
+    bool restoreVolume = true,
+    bool clearSnapshot = true,
+  }) async {
     try {
-      await _channel.invokeMethod('stopVolumeLock');
+      await _channel.invokeMethod('stopVolumeLock', {
+        'restore': restoreVolume,
+        'clearSnapshot': clearSnapshot,
+      });
     } catch (_) {
       // Fallback
     }
@@ -31,6 +44,9 @@ class VolumeLockService {
    * Immediately force system audio streams to 100%.
    */
   static Future<void> forceMaxVolume() async {
+    if (kDebugMode && await TokenStorage.isAntiAlarmBypassEnabled()) {
+      return;
+    }
     try {
       await _channel.invokeMethod('forceMaxVolume');
     } catch (_) {

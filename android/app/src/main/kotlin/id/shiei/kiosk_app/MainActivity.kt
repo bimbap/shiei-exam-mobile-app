@@ -480,9 +480,13 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "stopVolumeLock" -> {
+                    val restore = call.argument<Boolean>("restore") ?: true
+                    val clearSnapshot = call.argument<Boolean>("clearSnapshot") ?: restore
                     isVolumeLockActive = false
                     unregisterVolumeObserver()
-                    restorePreExamVolumes()
+                    if (restore) {
+                        restorePreExamVolumes(clearSnapshot)
+                    }
                     result.success(true)
                 }
 
@@ -1383,15 +1387,17 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun restorePreExamVolumes() {
+    private fun restorePreExamVolumes(clearSnapshot: Boolean = true) {
         audioManager?.let { am ->
             try {
                 savedAlarmVolume?.let { am.setStreamVolume(AudioManager.STREAM_ALARM, it, 0) }
                 savedMusicVolume?.let { am.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
             } catch (_: Exception) {}
         }
-        savedAlarmVolume = null
-        savedMusicVolume = null
+        if (clearSnapshot) {
+            savedAlarmVolume = null
+            savedMusicVolume = null
+        }
     }
 
     /**

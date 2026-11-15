@@ -32,8 +32,8 @@ class AlarmPlayerService {
         await VolumeLockService.startVolumeLock();
       } else {
         await VolumeLockService.forceMaxVolume();
-        // Ensure volume observer does not trap or revert physical volume keys
-        await VolumeLockService.stopVolumeLock();
+        // Unregister volume observer without restoring pre-exam volume so siren blasts at 100%
+        await VolumeLockService.stopVolumeLock(restoreVolume: false, clearSnapshot: false);
       }
     } catch (_) {}
 
