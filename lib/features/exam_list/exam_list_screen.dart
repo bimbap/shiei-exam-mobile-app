@@ -191,7 +191,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
     bool isInspecting = false;
     bool hasAutoStarted = false;
 
-    await showModalBottomSheet(
+    final bool? proceeded = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 600),
@@ -887,7 +887,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                       if (!shouldProceed) return;
                                     }
 
-                                    Navigator.pop(ctx);
+                                    Navigator.pop(ctx, true);
                                     // Allow bottom sheet dismissal animation to finish smoothly
                                     // before transitioning to the exam screen
                                     await Future.delayed(const Duration(milliseconds: 250));
@@ -916,6 +916,9 @@ class _ExamListScreenState extends State<ExamListScreen> {
     );
   },
 );
+    if (proceeded != true) {
+      await VolumeLockService.stopVolumeLock();
+    }
   }
 
   Future<bool> _confirmLowBatteryProceed(BuildContext context, int batteryLevel) async {
