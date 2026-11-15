@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../shared/theme/app_theme.dart';
+import '../../../shared/theme/app_theme.dart';
 
 class ConfirmDeleteDialog extends StatefulWidget {
   final String title;

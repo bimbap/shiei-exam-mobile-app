@@ -51,6 +51,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   bool _isHandshakeVerified = false;
   bool _isHandshakeInProgress = true;
   String? _handshakeErrorMessage;
+  String? _lastProgressError;
   bool _isTrackingInterrupted = false;
   bool _isOnPhoneCall = false;
   int _consecutiveHeartbeatFailures = 0;
@@ -215,7 +216,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
             _isHandshakeInProgress = false;
             _handshakeErrorMessage = isMismatch
                 ? 'Perangkat tidak sesuai dengan HP yang terdaftar untuk akun ini.\nSilakan hubungi pengawas untuk mereset kunci perangkat.'
-                : 'Gagal memverifikasi otorisasi perangkat ke server monitoring sekolah.\nSilakan periksa koneksi dan tekan Coba Lagi.';
+                : 'Gagal memverifikasi otorisasi perangkat ke server monitoring sekolah.\nSilakan periksa koneksi dan tekan Coba Lagi.${rawMsg.isNotEmpty ? '\n\nDetail: $rawMsg' : ''}';
           });
         }
         return;
@@ -245,7 +246,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     } else {
       setState(() {
         _isHandshakeInProgress = false;
-        _handshakeErrorMessage = 'Gagal melakukan otorisasi sesi dengan server pengawas.\nPastikan server sekolah aktif dan koneksi internet stabil.';
+        _handshakeErrorMessage = 'Gagal melakukan otorisasi sesi dengan server pengawas.\nPastikan server sekolah aktif dan koneksi internet stabil.${(_lastProgressError != null && _lastProgressError!.isNotEmpty) ? '\n\nDetail: $_lastProgressError' : ''}';
       });
     }
   }
@@ -425,7 +426,10 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       return true;
     } catch (e) {
       if (e is DioException) {
+        final code = e.response?.statusCode;
         final respData = e.response?.data;
+        final serverMsg = (respData is Map ? respData['message']?.toString() : null) ?? e.message;
+        _lastProgressError = code != null ? '[HTTP $code] ${serverMsg ?? e.type.name}' : '[${e.type.name}] ${serverMsg ?? e.toString()}';
         if (respData is Map && respData['data'] is Map) {
           final inner = respData['data'] as Map;
           if (inner['is_kicked'] == true || inner['status'] == 'terminated') {
@@ -433,6 +437,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
             return false;
           }
         }
+      } else {
+        _lastProgressError = e.toString();
       }
 
       if (status == 'in_progress') {

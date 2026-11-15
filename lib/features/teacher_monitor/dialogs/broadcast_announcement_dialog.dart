@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../../shared/theme/app_theme.dart';
-import '../../../../shared/widgets/app_notification.dart';
-import '../../../../shared/widgets/shiei_select_sheet.dart';
+import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/app_notification.dart';
+import '../../../shared/widgets/shiei_select_sheet.dart';
 import '../teacher_portal_controller.dart';
 
 class BroadcastAnnouncementDialog extends StatefulWidget {

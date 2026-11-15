@@ -24,6 +24,8 @@ class LockdownService with WidgetsBindingObserver {
   bool _isLockdownActive = false;
   bool _isHandlingViolation = false;
   bool _isOnPhoneCall = false;
+  bool _needsRePinAfterCall = false;
+  DateTime? _lastPhoneCallEndedAt;
   bool _isCharging = false;
   StreamSubscription<dynamic>? _screenshotSubscription;
   void Function(bool isOnCall)? onPhoneCallChanged;
@@ -48,14 +50,17 @@ class LockdownService with WidgetsBindingObserver {
     _isLockdownActive = true;
     _isHandlingViolation = false;
     _isOnPhoneCall = false;
+    _needsRePinAfterCall = false;
+    _lastPhoneCallEndedAt = null;
     _isCharging = false;
     onPhoneCallChanged = null;
 
     // Keep screen awake during exam
     WakelockPlus.enable();
 
-    // Enforce bright screen (>= 40% minimum)
+    // Enforce bright screen (>= 40% minimum) & lock hardware volume at 100%
     VolumeLockService.setWindowBrightness(60);
+    VolumeLockService.startVolumeLock();
 
     // Native protection relies on FLAG_SECURE (anti-screenshot/recents),
     // setHideOverlayWindows, and PopScope back-button blocking for 100% smooth entry
@@ -116,11 +121,15 @@ class LockdownService with WidgetsBindingObserver {
       _isHandlingViolation = false;
     }
     _isOnPhoneCall = false;
+    _needsRePinAfterCall = false;
+    _lastPhoneCallEndedAt = null;
     _isCharging = false;
     onPhoneCallChanged = null;
 
-    // Stop native Kiosk mode pinning
+    // Stop native Kiosk mode pinning, restore system brightness, and restore pre-exam device volume
     VolumeLockService.stopLockTask();
+    VolumeLockService.setWindowBrightness(-1);
+    VolumeLockService.stopVolumeLock();
 
     WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
@@ -138,21 +147,40 @@ class LockdownService with WidgetsBindingObserver {
     _isHandlingViolation = false;
   }
 
+  Future<void> _rePinAfterCallIfNeeded() async {
+    if (!_needsRePinAfterCall || !_isLockdownActive || _isOnPhoneCall) return;
+    await Future.delayed(const Duration(milliseconds: 450));
+    if (!_needsRePinAfterCall || !_isLockdownActive || _isOnPhoneCall) return;
+
+    _needsRePinAfterCall = false;
+    final bypassActive = await TokenStorage.isAppExitBypassEnabled();
+    if (!bypassActive) {
+      await VolumeLockService.startLockTask();
+      await VolumeLockService.setKioskSystemBarsBlocked(true);
+    }
+    await VolumeLockService.startVolumeLock();
+  }
+
   Future<void> _syncPhoneCallState(bool isCall) async {
-    if (isCall == _isOnPhoneCall) return;
+    if (isCall == _isOnPhoneCall) {
+      if (!isCall && _needsRePinAfterCall) {
+        await _rePinAfterCallIfNeeded();
+      }
+      return;
+    }
     _isOnPhoneCall = isCall;
     onPhoneCallChanged?.call(isCall);
     debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
 
-    // Temporarily release LockTask pinning while a call is active so incoming WhatsApp/Dialer UI
-    // can appear above the pinned screen, then re-engage pinning once the call ends.
+    // Keep LockTask pinning engaged during a phone call so students cannot freely switch apps/tabs,
+    // while temporarily unblocking kiosk system bars & restoring volume so call controls work normally.
     if (isCall) {
-      await VolumeLockService.stopLockTask();
+      _needsRePinAfterCall = true;
+      await VolumeLockService.setKioskSystemBarsBlocked(false);
+      await VolumeLockService.stopVolumeLock();
     } else {
-      final bypassActive = await TokenStorage.isAppExitBypassEnabled();
-      if (!bypassActive && _isLockdownActive) {
-        await VolumeLockService.startLockTask();
-      }
+      _lastPhoneCallEndedAt = DateTime.now();
+      await _rePinAfterCallIfNeeded();
     }
 
     if (_activeExamId != null) {
@@ -218,11 +246,15 @@ class LockdownService with WidgetsBindingObserver {
     }
 
     // Check if app changed state due to an incoming or active phone call (WhatsApp, Discord, Cellular)
-    // Business Requirement: Phone call during exam does NOT lock the exam, but auto-reports to panel & app!
+    // or within a 3s post-call transition grace window.
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
-    if (isPhoneCall) {
-      await _syncPhoneCallState(true);
-      debugPrint('[LockdownService] Voice call active during lifecycle change. Bypassing lockout ejection.');
+    final bool inPostCallGrace = _lastPhoneCallEndedAt != null &&
+        DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 3);
+    if (isPhoneCall || inPostCallGrace) {
+      if (isPhoneCall) {
+        await _syncPhoneCallState(true);
+      }
+      debugPrint('[LockdownService] Voice call active or post-call grace window. Bypassing lockout ejection.');
       return; // Do NOT trigger app_minimize or overlay_detected
     }
 

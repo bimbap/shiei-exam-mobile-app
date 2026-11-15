@@ -2047,9 +2047,34 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
     // Violation & integrity tracking
     final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+    final List<dynamic> violationLogs = (item['violation_logs'] as List?) ?? const [];
     final unlockedByName = item['unlocked_by_name']?.toString();
+    final lockReason = item['lock_reason']?.toString();
     final bool wasUnlocked = item['was_unlocked'] == true;
     final bool effectiveLocked = isLocked || (violationsCount > 0 && !isCompleted && !wasUnlocked);
+
+    String formatViolationLabel(String? eventType) {
+      switch (eventType) {
+        case 'app_minimize':
+          return 'Keluar / Minimize Aplikasi';
+        case 'overlay_detected':
+          return 'Overlay / Notifikasi Mengambang';
+        case 'split_screen':
+          return 'Layar Belah (Split Screen)';
+        case 'screenshot_attempt':
+          return 'Percobaan Tangkapan Layar';
+        case 'external_display':
+          return 'Layar Eksternal / Mirroring';
+        case 'bluetooth_enabled':
+          return 'Bluetooth Aktif';
+        case 'usb_debugging':
+          return 'USB Debugging Aktif';
+        case 'proctor_kick':
+          return 'Dikeluarkan oleh Pengawas';
+        default:
+          return (eventType ?? 'Pelanggaran').replaceAll('_', ' ').toUpperCase();
+      }
+    }
 
     String integrityText;
     Color integrityColor;
@@ -2298,6 +2323,122 @@ class _ExamListScreenState extends State<ExamListScreen> {
                     ],
                   ),
                 ),
+                if (violationLogs.isNotEmpty ||
+                    (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ||
+                    (effectiveLocked && lockReason != null && lockReason.isNotEmpty)) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.surfaceDark : const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: effectiveLocked
+                            ? AppTheme.dangerRed.withOpacity(0.35)
+                            : const Color(0xFFF59E0B).withOpacity(0.35),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.shield_outlined,
+                              size: 16,
+                              color: effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Rincian Pelanggaran & Pembukaan',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : AppTheme.textPrimaryLight,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Dibuka kembali oleh: $unlockedByName',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                            ),
+                          ),
+                        ],
+                        if (effectiveLocked && lockReason != null && lockReason.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Keterangan: $lockReason',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppTheme.dangerRed,
+                            ),
+                          ),
+                        ],
+                        if (violationLogs.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 150),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: violationLogs.map((rawLog) {
+                                  final log = rawLog as Map<String, dynamic>;
+                                  final eventLabel = formatViolationLabel(log['event_type']?.toString());
+                                  final details = log['details']?.toString();
+                                  final occurredAt = formatDate(log['occurred_at']);
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 4),
+                                          child: Icon(Icons.circle, size: 6, color: AppTheme.dangerRed),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                '$eventLabel • $occurredAt',
+                                                style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: isDark ? Colors.white : AppTheme.textPrimaryLight,
+                                                ),
+                                              ),
+                                              if (details != null && details.isNotEmpty)
+                                                Text(
+                                                  details,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 18),
 
                 ElevatedButton(
@@ -3378,61 +3519,6 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                   ],
                                 ),
                               ),
-                            ),
-                          ),
-                          Divider(height: 1, indent: 62, color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),
-
-                          // Efek Suara & Audio
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF3B82F6).withValues(alpha: isDark ? 0.2 : 0.1),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(
-                                    _isAudioFeedbackEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                                    color: const Color(0xFF3B82F6),
-                                    size: 19,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Efek Suara & Audio',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        'Peringatan suara sisa waktu & notifikasi ujian',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Switch.adaptive(
-                                  value: _isAudioFeedbackEnabled,
-                                  activeTrackColor: const Color(0xFFEA580C),
-                                  onChanged: (val) async {
-                                    await TokenStorage.setAudioFeedbackEnabled(val);
-                                    if (mounted) setState(() => _isAudioFeedbackEnabled = val);
-                                  },
-                                ),
-                              ],
                             ),
                           ),
                           Divider(height: 1, indent: 62, color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9)),

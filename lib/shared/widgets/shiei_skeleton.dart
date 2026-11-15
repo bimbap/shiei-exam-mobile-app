@@ -697,29 +697,6 @@ class StudentProfileSkeleton extends StatelessWidget {
                             ),
                             Divider(height: 1, indent: 62, color: cardBorder),
 
-                            // Tile 2: Efek Suara & Audio
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              child: Row(
-                                children: [
-                                  ShieiSkeletonBox(width: 36, height: 36, borderRadius: 10),
-                                  SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        ShieiSkeletonBox(width: 135, height: 13, borderRadius: 4),
-                                        SizedBox(height: 4),
-                                        ShieiSkeletonBox(width: 180, height: 11, borderRadius: 4),
-                                      ],
-                                    ),
-                                  ),
-                                  ShieiSkeletonBox(width: 38, height: 22, borderRadius: 12),
-                                ],
-                              ),
-                            ),
-                            Divider(height: 1, indent: 62, color: cardBorder),
-
                             // Tile 3: Pengaturan & Info Aplikasi
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),

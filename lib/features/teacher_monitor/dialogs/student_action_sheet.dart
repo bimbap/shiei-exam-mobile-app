@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../shared/theme/app_theme.dart';
-import '../../../../shared/widgets/app_notification.dart';
+import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/app_notification.dart';
 import '../detail/student_detail_screen.dart';
 import '../teacher_portal_controller.dart';
 import 'adjust_time_dialog.dart';

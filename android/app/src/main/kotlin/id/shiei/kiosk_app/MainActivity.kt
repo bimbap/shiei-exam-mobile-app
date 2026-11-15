@@ -52,6 +52,8 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "id.shiei/lockdown"
     private val EVENT_CHANNEL = "id.shiei/lockdown_events"
     private var isVolumeLockActive = false
+    private var savedAlarmVolume: Int? = null
+    private var savedMusicVolume: Int? = null
     private var audioManager: AudioManager? = null
     private var volumeObserver: ContentObserver? = null
     private var telephonyManager: TelephonyManager? = null
@@ -316,10 +318,12 @@ class MainActivity : FlutterActivity() {
 
                 "setFlagSecure" -> {
                     val enable = call.argument<Boolean>("enable") ?: true
-                    if (enable) {
-                        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
-                    } else {
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    runOnUiThread {
+                        if (enable) {
+                            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                        }
                     }
                     result.success(true)
                 }
@@ -344,6 +348,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "startVolumeLock" -> {
+                    snapshotPreExamVolumes()
                     isVolumeLockActive = true
                     forceVolumeToMaximum()
                     registerVolumeObserver()
@@ -353,6 +358,7 @@ class MainActivity : FlutterActivity() {
                 "stopVolumeLock" -> {
                     isVolumeLockActive = false
                     unregisterVolumeObserver()
+                    restorePreExamVolumes()
                     result.success(true)
                 }
 
@@ -1163,10 +1169,15 @@ class MainActivity : FlutterActivity() {
 
     private fun setWindowBrightness(percent: Int) {
         try {
-            val clamped = (percent.coerceIn(40, 100)) / 100f
-            val lp = window.attributes
-            lp.screenBrightness = clamped
-            window.attributes = lp
+            runOnUiThread {
+                val lp = window.attributes
+                lp.screenBrightness = if (percent < 0) {
+                    WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                } else {
+                    (percent.coerceIn(40, 100)) / 100f
+                }
+                window.attributes = lp
+            }
         } catch (e: Exception) {
             // Ignore on unsupported devices
         }
@@ -1215,10 +1226,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun snapshotPreExamVolumes() {
+        audioManager?.let { am ->
+            if (savedAlarmVolume == null) {
+                savedAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            }
+            if (savedMusicVolume == null) {
+                savedMusicVolume = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            }
+        }
+    }
+
+    private fun restorePreExamVolumes() {
+        audioManager?.let { am ->
+            try {
+                savedAlarmVolume?.let { am.setStreamVolume(AudioManager.STREAM_ALARM, it, 0) }
+                savedMusicVolume?.let { am.setStreamVolume(AudioManager.STREAM_MUSIC, it, 0) }
+            } catch (_: Exception) {}
+        }
+        savedAlarmVolume = null
+        savedMusicVolume = null
+    }
+
     /**
      * Set stream volume to 100% max hardware capacity.
      */
     private fun forceVolumeToMaximum() {
+        snapshotPreExamVolumes()
         audioManager?.let { am ->
             val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
@@ -1379,7 +1413,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onTopResumedActivityChanged(isTopResumedActivity: Boolean) {
         super.onTopResumedActivityChanged(isTopResumedActivity)
-        if (!isTopResumedActivity) {
+        if (isTopResumedActivity) {
+            // Clear stale top-resumed flags once this activity regains top focus
+            hasAnotherActivityTakenTopResume = false
+            lastTimeAnotherActivityTopResumed = 0L
+            lastTimeNotTopResumed = 0L
+        } else {
             lastTimeNotTopResumed = System.currentTimeMillis()
             if (!isActivityStopped) {
                 hasAnotherActivityTakenTopResume = true
@@ -1699,6 +1738,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         unregisterVolumeObserver()
+        restorePreExamVolumes()
         super.onDestroy()
     }
 }

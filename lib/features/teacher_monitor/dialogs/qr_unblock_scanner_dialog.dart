@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import '../../../../shared/widgets/app_notification.dart';
+import '../../../shared/widgets/app_notification.dart';
 import '../teacher_portal_controller.dart';
 
 class QrUnblockScannerDialog extends StatefulWidget {

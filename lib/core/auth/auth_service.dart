@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
 import '../api/api_client.dart';
 import '../api/endpoints.dart';
 import 'token_storage.dart';
@@ -115,7 +116,16 @@ class AuthService {
       }
       return {'status': 'error', 'message': 'Respons verifikasi perangkat tidak valid.'};
     } catch (e) {
-      // Re-throw or return error map with message
+      if (e is DioException) {
+        final code = e.response?.statusCode;
+        final resp = e.response?.data;
+        final serverMsg = (resp is Map ? resp['message']?.toString() : null) ?? e.message;
+        return {
+          'status': 'error',
+          'status_code': code,
+          'message': code != null ? '[HTTP $code] ${serverMsg ?? e.type.name}' : '[${e.type.name}] ${serverMsg ?? e.toString()}',
+        };
+      }
       return {'status': 'error', 'message': e.toString()};
     }
   }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../shared/theme/app_theme.dart';
-import '../../../../shared/widgets/app_notification.dart';
+import '../../../shared/theme/app_theme.dart';
+import '../../../shared/widgets/app_notification.dart';
 import '../dialogs/class_form_dialog.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../teacher_portal_controller.dart';
