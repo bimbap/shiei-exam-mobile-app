@@ -55,6 +55,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   bool _isTrackingInterrupted = false;
   bool _isOnPhoneCall = false;
   int _callWindowSecondsLeft = 0;
+  int _callWindowUsesInCurrentCall = 0;
+  static const int _maxCallWindowUsesPerCall = 2;
   Timer? _callWindowCountdownTimer;
   int _consecutiveHeartbeatFailures = 0;
   int _examDurationMinutes = 60;
@@ -163,10 +165,13 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       if (!onCall) {
         _callWindowCountdownTimer?.cancel();
       }
-      if (mounted && (_isOnPhoneCall != onCall || (!onCall && _callWindowSecondsLeft != 0))) {
+      if (mounted && (_isOnPhoneCall != onCall || (!onCall && (_callWindowSecondsLeft != 0 || _callWindowUsesInCurrentCall != 0)))) {
         setState(() {
           _isOnPhoneCall = onCall;
-          if (!onCall) _callWindowSecondsLeft = 0;
+          if (!onCall) {
+            _callWindowSecondsLeft = 0;
+            _callWindowUsesInCurrentCall = 0;
+          }
         });
       }
     };
@@ -1307,8 +1312,14 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   }
 
   void _openCallControlWindowWithCountdown() {
+    if (_callWindowSecondsLeft > 0 || _callWindowUsesInCurrentCall >= _maxCallWindowUsesPerCall) {
+      return;
+    }
     _callWindowCountdownTimer?.cancel();
-    setState(() => _callWindowSecondsLeft = 10);
+    setState(() {
+      _callWindowUsesInCurrentCall += 1;
+      _callWindowSecondsLeft = 10;
+    });
     _lockdown.notifyCallControlWindowOpened(const Duration(seconds: 10));
     VolumeLockService.openCallControlWindow(durationMs: 10000);
     _callWindowCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -1378,20 +1389,28 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _callWindowSecondsLeft > 0
-                          ? const Color(0xFF0369A1)
-                          : const Color(0xFF0284C7),
+                      backgroundColor: _callWindowUsesInCurrentCall >= _maxCallWindowUsesPerCall && _callWindowSecondsLeft == 0
+                          ? const Color(0xFF334155)
+                          : (_callWindowSecondsLeft > 0
+                              ? const Color(0xFF0369A1)
+                              : const Color(0xFF0284C7)),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFF334155),
+                      disabledForegroundColor: const Color(0xFF94A3B8),
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: _openCallControlWindowWithCountdown,
+                    onPressed: (_callWindowSecondsLeft > 0 || _callWindowUsesInCurrentCall >= _maxCallWindowUsesPerCall)
+                        ? null
+                        : _openCallControlWindowWithCountdown,
                     icon: Icon(
-                      _callWindowSecondsLeft > 0
-                          ? Icons.timer_outlined
-                          : Icons.notifications_active_rounded,
+                      _callWindowUsesInCurrentCall >= _maxCallWindowUsesPerCall && _callWindowSecondsLeft == 0
+                          ? Icons.lock_clock_rounded
+                          : (_callWindowSecondsLeft > 0
+                              ? Icons.timer_outlined
+                              : Icons.notifications_active_rounded),
                       size: 18,
                     ),
                     label: AnimatedSwitcher(
@@ -1432,11 +1451,17 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                                 ),
                               ],
                             )
-                          : const Text(
-                              'Buka Panel Panggilan (10 Detik)',
-                              key: ValueKey('open_call_panel'),
-                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                            ),
+                          : (_callWindowUsesInCurrentCall >= _maxCallWindowUsesPerCall
+                              ? const Text(
+                                  'Batas Buka Panel Tercapai (Maks 2x)',
+                                  key: ValueKey('limit_reached'),
+                                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                )
+                              : Text(
+                                  'Buka Panel Panggilan (10 Detik • Sisa ${_maxCallWindowUsesPerCall - _callWindowUsesInCurrentCall}x)',
+                                  key: ValueKey('open_call_panel_$_callWindowUsesInCurrentCall'),
+                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                )),
                     ),
                   ),
                 ),
