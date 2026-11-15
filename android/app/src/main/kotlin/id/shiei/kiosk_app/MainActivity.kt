@@ -222,8 +222,11 @@ class MainActivity : FlutterActivity() {
         callWindowHandler.postDelayed(runnable, 150L)
     }
 
-    private fun openCallControlWindow(durationMs: Long = 10000L) {
+    private fun openCallControlWindow(durationMs: Long = 6000L) {
         callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
+        rePinRunnable?.let { callWindowHandler.removeCallbacks(it) }
+        rePinRunnable = null
+        lastLockTaskAttemptTime = 0L
         isCallControlWindowOpen = true
         pendingRePinAfterCall = true
         isKioskSystemBarsBlocked = false

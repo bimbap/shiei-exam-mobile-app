@@ -158,11 +158,13 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       context: context,
     );
     _lockdown.onPhoneCallChanged = (onCall) {
+      _setWebViewBlur(onCall);
       if (mounted && _isOnPhoneCall != onCall) {
         setState(() => _isOnPhoneCall = onCall);
       }
     };
     VolumeLockService.isPhoneCallActive().then((onCall) {
+      _setWebViewBlur(onCall);
       if (mounted && onCall != _isOnPhoneCall) {
         setState(() => _isOnPhoneCall = onCall);
       }
@@ -1281,14 +1283,23 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     );
   }
 
+  void _setWebViewBlur(bool blur) {
+    final ctrl = _webViewController;
+    if (ctrl == null) return;
+    final js = blur
+        ? "(function(){var el=document.documentElement;if(el){el.style.transition='filter 0.15s ease';el.style.filter='blur(16px)';el.style.pointerEvents='none';}})();"
+        : "(function(){var el=document.documentElement;if(el){el.style.filter='';el.style.pointerEvents='';}})();";
+    ctrl.evaluateJavascript(source: js).catchError((_) {});
+  }
+
   Widget _buildPhoneCallShield(bool isDark) {
     return ClipRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           color: isDark
-              ? Colors.black.withValues(alpha: 0.86)
-              : const Color(0xFF0F172A).withValues(alpha: 0.84),
+              ? const Color(0xFF0A192F).withValues(alpha: 0.74)
+              : const Color(0xFF0F172A).withValues(alpha: 0.72),
           child: SafeArea(
         child: Center(
           child: Padding(
@@ -1345,11 +1356,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                       ),
                     ),
                     onPressed: () async {
-                      await VolumeLockService.openCallControlWindow(durationMs: 0);
+                      await VolumeLockService.openCallControlWindow(durationMs: 6000);
                     },
                     icon: const Icon(Icons.notifications_active_rounded, size: 18),
                     label: const Text(
-                      'Buka Panel Panggilan',
+                      'Buka Panel Panggilan (6 Detik)',
                       style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                     ),
                   ),
