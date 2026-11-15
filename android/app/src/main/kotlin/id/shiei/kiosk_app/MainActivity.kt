@@ -56,6 +56,7 @@ class MainActivity : FlutterActivity() {
     private var savedMusicVolume: Int? = null
     private var audioManager: AudioManager? = null
     private var volumeObserver: ContentObserver? = null
+    private var volumeBroadcastReceiver: android.content.BroadcastReceiver? = null
     private var telephonyManager: TelephonyManager? = null
     private var telecomManager: TelecomManager? = null
     private var isPhoneCallActive = false
@@ -1400,15 +1401,20 @@ class MainActivity : FlutterActivity() {
         snapshotPreExamVolumes()
         audioManager?.let { am ->
             val maxAlarm = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
+            if (am.getStreamVolume(AudioManager.STREAM_ALARM) < maxAlarm) {
+                am.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarm, 0)
+            }
 
             val maxMusic = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            am.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+            if (am.getStreamVolume(AudioManager.STREAM_MUSIC) < maxMusic) {
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxMusic, 0)
+            }
         }
     }
 
     /**
-     * Register observer on audio settings so any decrease in volume immediately bounces back to max.
+     * Register observer & BroadcastReceiver on audio settings so any decrease in volume
+     * (via hardware buttons OR touch volume slider) immediately bounces back to 100%.
      */
     private fun registerVolumeObserver() {
         if (volumeObserver == null) {
@@ -1426,12 +1432,37 @@ class MainActivity : FlutterActivity() {
                 volumeObserver!!
             )
         }
+        if (volumeBroadcastReceiver == null) {
+            volumeBroadcastReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: Context?, intent: Intent?) {
+                    if (isVolumeLockActive && intent?.action == "android.media.VOLUME_CHANGED_ACTION") {
+                        forceVolumeToMaximum()
+                    }
+                }
+            }
+            try {
+                val filter = IntentFilter("android.media.VOLUME_CHANGED_ACTION")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(volumeBroadcastReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+                } else {
+                    registerReceiver(volumeBroadcastReceiver, filter)
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     private fun unregisterVolumeObserver() {
         volumeObserver?.let {
-            contentResolver.unregisterContentObserver(it)
+            try {
+                contentResolver.unregisterContentObserver(it)
+            } catch (_: Exception) {}
             volumeObserver = null
+        }
+        volumeBroadcastReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {}
+            volumeBroadcastReceiver = null
         }
     }
 
@@ -1528,6 +1559,11 @@ class MainActivity : FlutterActivity() {
     override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
         if (event != null && event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             lastVolumeDownTime = System.currentTimeMillis()
+        }
+        if (isVolumeLockActive && event != null &&
+            (event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || event.keyCode == KeyEvent.KEYCODE_VOLUME_MUTE)) {
+            forceVolumeToMaximum()
+            return true
         }
         return super.dispatchKeyEvent(event)
     }

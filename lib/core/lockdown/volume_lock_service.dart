@@ -1,7 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import '../auth/token_storage.dart';
 
 class VolumeLockService {
   static const MethodChannel _channel = MethodChannel('id.shiei/lockdown');
@@ -11,9 +9,6 @@ class VolumeLockService {
    * Native Android listener will override any volume reduction back to 100%.
    */
   static Future<void> startVolumeLock() async {
-    if (kDebugMode && await TokenStorage.isAntiAlarmBypassEnabled()) {
-      return;
-    }
     try {
       await _channel.invokeMethod('startVolumeLock');
     } catch (_) {
@@ -36,9 +31,6 @@ class VolumeLockService {
    * Immediately force system audio streams to 100%.
    */
   static Future<void> forceMaxVolume() async {
-    if (kDebugMode && await TokenStorage.isAntiAlarmBypassEnabled()) {
-      return;
-    }
     try {
       await _channel.invokeMethod('forceMaxVolume');
     } catch (_) {

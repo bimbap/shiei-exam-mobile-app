@@ -2108,13 +2108,21 @@ class _ExamListScreenState extends State<ExamListScreen> {
       }
     }
 
+    final bool hasWarningTab = violationsCount > 0 ||
+        violationLogs.isNotEmpty ||
+        (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ||
+        (effectiveLocked && lockReason != null && lockReason.isNotEmpty);
+    int activeDetailTab = 0;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       constraints: const BoxConstraints(maxWidth: 600),
       backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = AppTheme.isDark(ctx);
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            final isDark = AppTheme.isDark(ctx);
         final Color bannerColor = isDark
             ? (effectiveLocked
                 ? AppTheme.dangerRed
@@ -2287,49 +2295,138 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Info Rows
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: isDark ? AppTheme.surfaceDark : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                if (hasWarningTab) ...[
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setSheetState(() => activeDetailTab = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              decoration: BoxDecoration(
+                                color: activeDetailTab == 0
+                                    ? (isDark ? const Color(0xFF0F172A) : Colors.white)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 15,
+                                    color: activeDetailTab == 0
+                                        ? AppTheme.primaryGlow
+                                        : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Info Ujian',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: activeDetailTab == 0
+                                          ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
+                                          : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setSheetState(() => activeDetailTab = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                              decoration: BoxDecoration(
+                                color: activeDetailTab == 1
+                                    ? (isDark ? const Color(0xFF0F172A) : Colors.white)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 15,
+                                    color: activeDetailTab == 1
+                                        ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
+                                        : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    violationsCount > 0 ? 'Peringatan ($violationsCount)' : 'Peringatan',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: activeDetailTab == 1
+                                          ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
+                                          : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      _buildHistoryDetailRow(ctx, 'Lama Pengerjaan:', formatDurationSpent(elapsedSec), valueColor: AppTheme.primaryGlow),
-                      Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                      _buildHistoryDetailRow(ctx, 'Batas Alokasi Waktu:', FormatUtils.formatDurationHoursMinutes(duration)),
-                      Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                      _buildHistoryDetailRow(
-                        ctx,
-                        (isEnded && elapsedSec <= 0) ? 'Jadwal Mulai:' : 'Waktu Mulai:',
-                        formatDate(startTime),
-                      ),
-                      Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                      _buildHistoryDetailRow(
-                        ctx,
-                        isCompleted
-                            ? 'Waktu Selesai:'
-                            : (isEnded ? 'Waktu Berakhir:' : 'Aktivitas Terakhir:'),
-                        formatDate(endTime),
-                      ),
-                      Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                      _buildHistoryDetailRow(
-                        ctx,
-                        'Riwayat Integritas:',
-                        integrityText,
-                        valueColor: integrityColor,
-                      ),
-                    ],
-                  ),
-                ),
-                if (violationLogs.isNotEmpty ||
-                    (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ||
-                    (effectiveLocked && lockReason != null && lockReason.isNotEmpty)) ...[
                   const SizedBox(height: 12),
+                ],
+
+                // Tab 0: Info Rows
+                if (!hasWarningTab || activeDetailTab == 0)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppTheme.surfaceDark : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildHistoryDetailRow(ctx, 'Lama Pengerjaan:', formatDurationSpent(elapsedSec), valueColor: AppTheme.primaryGlow),
+                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                        _buildHistoryDetailRow(ctx, 'Batas Alokasi Waktu:', FormatUtils.formatDurationHoursMinutes(duration)),
+                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                        _buildHistoryDetailRow(
+                          ctx,
+                          (isEnded && elapsedSec <= 0) ? 'Jadwal Mulai:' : 'Waktu Mulai:',
+                          formatDate(startTime),
+                        ),
+                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                        _buildHistoryDetailRow(
+                          ctx,
+                          isCompleted
+                              ? 'Waktu Selesai:'
+                              : (isEnded ? 'Waktu Berakhir:' : 'Aktivitas Terakhir:'),
+                          formatDate(endTime),
+                        ),
+                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                        _buildHistoryDetailRow(
+                          ctx,
+                          'Riwayat Integritas:',
+                          integrityText,
+                          valueColor: integrityColor,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Tab 1: Peringatan & Pelanggaran
+                if (hasWarningTab && activeDetailTab == 1)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
@@ -2388,7 +2485,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                         if (violationLogs.isNotEmpty) ...[
                           const SizedBox(height: 8),
                           ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 150),
+                            constraints: const BoxConstraints(maxHeight: 200),
                             child: SingleChildScrollView(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2441,7 +2538,6 @@ class _ExamListScreenState extends State<ExamListScreen> {
                       ],
                     ),
                   ),
-                ],
                 const SizedBox(height: 18),
 
                 ElevatedButton(
@@ -2457,6 +2553,8 @@ class _ExamListScreenState extends State<ExamListScreen> {
               ],
             ),
           ),
+        );
+          },
         );
       },
     );
