@@ -280,24 +280,7 @@ class LockdownService with WidgetsBindingObserver {
       if (isPhoneCall) {
         await _syncPhoneCallState(true);
       }
-      // Pulling down the notification shade only triggers AppLifecycleState.inactive.
-      // If the student actually leaves Shiei to Home, Recents, or another app (paused) for > 1.2s,
-      // flag app_minimize immediately so the 10s Call Control Window cannot be abused to switch apps.
-      if (state == AppLifecycleState.paused) {
-        await Future.delayed(const Duration(milliseconds: 1200));
-        if (!_isLockdownActive || _isHandlingViolation) return;
-        if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
-          final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
-          if (!isExitBypass) {
-            handleViolation(
-              eventType: 'app_minimize',
-              details: 'Siswa keluar dari aplikasi ujian / membuka aplikasi lain saat panggilan berlangsung.',
-            );
-          }
-        }
-        return;
-      }
-      debugPrint('[LockdownService] Voice call active (inactive/shade). Allowing notification control.');
+      debugPrint('[LockdownService] Voice call active or post-call grace window. Waiting for call window re-pin / hangup.');
       return;
     }
 
