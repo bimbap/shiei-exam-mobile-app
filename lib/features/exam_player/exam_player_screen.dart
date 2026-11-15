@@ -1339,11 +1339,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                       ),
                     ),
                     onPressed: () async {
-                      await VolumeLockService.openCallControlWindow(durationMs: 6500);
+                      await VolumeLockService.openCallControlWindow(durationMs: 10000);
                     },
                     icon: const Icon(Icons.notifications_active_rounded, size: 18),
                     label: const Text(
-                      'Jawab / Buka Panel Panggilan (6 Detik)',
+                      'Jawab / Buka Panel Panggilan (10 Detik)',
                       style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                     ),
                   ),

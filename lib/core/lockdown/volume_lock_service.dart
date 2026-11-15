@@ -325,7 +325,7 @@ class VolumeLockService {
    * so the student can tap Answer / End Call on an incoming/active phone call, then automatically
    * pull Shiei back to the foreground and re-pin LockTask even while the call continues.
    */
-  static Future<bool> openCallControlWindow({int durationMs = 5500}) async {
+  static Future<bool> openCallControlWindow({int durationMs = 10000}) async {
     try {
       final bool success = await _channel.invokeMethod('openCallControlWindow', {
         'durationMs': durationMs,

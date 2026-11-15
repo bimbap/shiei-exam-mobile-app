@@ -175,13 +175,13 @@ class LockdownService with WidgetsBindingObserver {
     onPhoneCallChanged?.call(isCall);
     debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
 
-    // When a call starts/rings, open a 6.5s Call Control Window (unpins & drops down notification shade
+    // When a call starts/rings, open a 10s Call Control Window (unpins & drops down notification shade
     // so the student can tap Answer), then automatically pull Shiei back to front and re-pin LockTask
     // while the call continues so students cannot switch tabs/apps during the call.
     if (isCall) {
       _needsRePinAfterCall = true;
       await VolumeLockService.stopVolumeLock();
-      await VolumeLockService.openCallControlWindow(durationMs: 6500);
+      await VolumeLockService.openCallControlWindow(durationMs: 10000);
     } else {
       _lastPhoneCallEndedAt = DateTime.now();
       await VolumeLockService.resetOverlayTouchDetection();
@@ -255,22 +255,22 @@ class LockdownService with WidgetsBindingObserver {
     }
 
     // Check if app changed state due to an incoming or active phone call (WhatsApp, Discord, Cellular)
-    // or within a 6s post-call transition grace window.
+    // or within a 10s post-call transition grace window.
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
     final bool inPostCallGrace = _lastPhoneCallEndedAt != null &&
-        DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 6);
+        DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 10);
     if (isPhoneCall || inPostCallGrace) {
       if (isPhoneCall) {
         await _syncPhoneCallState(true);
         // If student left Shiei to a full-screen call screen (paused), pull Shiei back to front & re-pin
-        // after 3.5s, and kick if they remain outside Shiei in another app/tab after 6.5s.
+        // after 6s, and kick if they remain outside Shiei in another app/tab after 10.5s.
         if (state == AppLifecycleState.paused) {
-          await Future.delayed(const Duration(milliseconds: 3500));
+          await Future.delayed(const Duration(milliseconds: 6000));
           if (!_isLockdownActive || _isHandlingViolation) return;
           if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
             await VolumeLockService.bringAppToFront();
             await VolumeLockService.closeCallControlWindowAndRePin();
-            await Future.delayed(const Duration(milliseconds: 3000));
+            await Future.delayed(const Duration(milliseconds: 4500));
             if (!_isLockdownActive || _isHandlingViolation) return;
             if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
               final isExitBypass = await TokenStorage.isAppExitBypassEnabled();

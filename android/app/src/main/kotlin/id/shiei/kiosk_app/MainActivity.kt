@@ -212,7 +212,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun openCallControlWindow(durationMs: Long = 5500L) {
+    private fun openCallControlWindow(durationMs: Long = 10000L) {
         callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
         isCallControlWindowOpen = true
         pendingRePinAfterCall = true
@@ -526,7 +526,7 @@ class MainActivity : FlutterActivity() {
                         // or within the post-call grace window, clear stale overlay flags and do NOT treat as overlay!
                         val callActiveNow = checkIfPhoneOrVoipCallActive()
                         val recentCallGrace = lastPhoneCallDetectedTime > 0L &&
-                                (SystemClock.elapsedRealtime() - lastPhoneCallDetectedTime) < 8000L
+                                (SystemClock.elapsedRealtime() - lastPhoneCallDetectedTime) < 12000L
                         if (callActiveNow || isCallControlWindowOpen || recentCallGrace) {
                             resetOverlayFlags()
                             result.success(mapOf(
@@ -639,7 +639,7 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "openCallControlWindow" -> {
-                    val durationMs = (call.argument<Number>("durationMs"))?.toLong() ?: 5500L
+                    val durationMs = (call.argument<Number>("durationMs"))?.toLong() ?: 10000L
                     openCallControlWindow(durationMs)
                     result.success(true)
                 }
