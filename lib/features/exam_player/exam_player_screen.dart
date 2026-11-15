@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1320,14 +1319,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   }
 
   Widget _buildPhoneCallShield(bool isDark) {
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: Container(
-          color: isDark
-              ? const Color(0xFF0A192F).withValues(alpha: 0.74)
-              : const Color(0xFF0F172A).withValues(alpha: 0.72),
-          child: SafeArea(
+    return Container(
+      color: isDark
+          ? const Color(0xFF0A192F).withValues(alpha: 0.78)
+          : const Color(0xFF0F172A).withValues(alpha: 0.76),
+      child: SafeArea(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -1440,8 +1436,6 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
               ],
             ),
           ),
-        ),
-      ),
         ),
       ),
     );
