@@ -16,11 +16,14 @@ class UrlExamPlayer extends StatefulWidget {
     this.onControllerCreated,
   });
 
-  static const Set<String> _trustedExamHosts = {
+  static const Set<String> _trustedMainFrameHosts = {
     'docs.google.com',
-    'drive.google.com',
     'forms.gle',
     'accounts.google.com',
+  };
+
+  static const Set<String> _trustedSubresourceHosts = {
+    'drive.google.com',
     'googleusercontent.com',
     'gstatic.com',
     'googleapis.com',
@@ -56,14 +59,16 @@ class UrlExamPlayer extends StatefulWidget {
 
     // Subresources / embedded frames must stay on valid http(s), never external cleartext or custom schemes.
     if (!isMainFrame) {
-      return true;
+      return _trustedMainFrameHosts.any((domain) => _hostMatchesDomain(host, domain)) ||
+          _trustedSubresourceHosts.any((domain) => _hostMatchesDomain(host, domain)) ||
+          (Uri.tryParse(examUrl.trim())?.host.toLowerCase() == host);
     }
 
     final examUri = Uri.tryParse(examUrl.trim());
     final examHost = examUri?.host.toLowerCase() ?? '';
     final isExamHost = examHost.isNotEmpty && _hostMatchesDomain(host, examHost);
     final isAnchor = examUri != null && uri.fragment.isNotEmpty && uri.path == examUri.path && host == examHost;
-    final isTrustedProvider = _trustedExamHosts.any((domain) => _hostMatchesDomain(host, domain));
+    final isTrustedProvider = _trustedMainFrameHosts.any((domain) => _hostMatchesDomain(host, domain));
 
     return isExamHost || isAnchor || isTrustedProvider;
   }
@@ -185,6 +190,10 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
 
                 document.addEventListener('cut', function(e) {
                   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+                  e.preventDefault();
+                }, true);
+
+                document.addEventListener('paste', function(e) {
                   e.preventDefault();
                 }, true);
 

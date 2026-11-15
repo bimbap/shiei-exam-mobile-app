@@ -144,6 +144,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     VolumeLockService.lockOrientationPortrait(true);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    Clipboard.setData(const ClipboardData(text: ''));
 
     // Enforce native anti-screenshot protection strictly during active exam
     // In release mode: permanently enforced. In debug mode: follow setting toggle.
@@ -1113,7 +1114,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                     : (_isReadyToRenderWebView
                         ? UrlExamPlayer(
                             url: url,
-                            onPageLoaded: () {},
+                            onPageLoaded: () {
+                              if (_isOnPhoneCall) {
+                                _setWebViewBlur(true);
+                              }
+                            },
                             onControllerCreated: (ctrl) => _webViewController = ctrl,
                           )
                         : const Center(
@@ -1375,17 +1380,20 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nJawab atau akhiri panggilan melalui panel notifikasi atas. Dilarang keluar dari aplikasi Shiei atau berpindah tab selama panggilan berlangsung.',
-                  style: TextStyle(
+                Text(
+                  Platform.isIOS
+                      ? 'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nJawab atau akhiri panggilan melalui banner panggilan iOS di bagian atas layar.'
+                      : 'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nJawab atau akhiri panggilan melalui panel notifikasi atas. Dilarang keluar dari aplikasi Shiei atau berpindah tab selama panggilan berlangsung.',
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFFCBD5E1),
                     height: 1.45,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
+                if (!Platform.isIOS) ...[
+                  const SizedBox(height: 20),
+                  SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
@@ -1465,6 +1473,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                     ),
                   ),
                 ),
+                ],
               ],
             ),
           ),

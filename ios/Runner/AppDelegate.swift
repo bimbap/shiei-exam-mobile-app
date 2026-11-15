@@ -147,7 +147,33 @@ import UserNotifications
         result(state == .charging || state == .full)
 
       case "isExternalDisplayConnected":
-        result(UIScreen.screens.count > 1)
+        if #available(iOS 11.0, *) {
+          result(UIScreen.screens.count > 1 || UIScreen.main.isCaptured)
+        } else {
+          result(UIScreen.screens.count > 1)
+        }
+
+      case "openCallControlWindow":
+        let durationMs = (call.arguments as? [String: Any])?["durationMs"] as? Int ?? 10000
+        if #available(iOS 12.2, *), UIAccessibility.isGuidedAccessEnabled {
+          UIAccessibility.requestGuidedAccessSession(enabled: false) { _ in
+            if durationMs > 0 {
+              DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(durationMs)) {
+                UIAccessibility.requestGuidedAccessSession(enabled: true) { _ in }
+              }
+            }
+          }
+        }
+        result(true)
+
+      case "closeCallControlWindowAndRePin":
+        if #available(iOS 12.2, *) {
+          UIAccessibility.requestGuidedAccessSession(enabled: true) { _ in }
+        }
+        result(true)
+
+      case "bringAppToFront":
+        result(true)
 
       case "getScreenBrightness":
         let brightness = Int(UIScreen.main.brightness * 100)
