@@ -2052,9 +2052,40 @@ class _ExamListScreenState extends State<ExamListScreen> {
     final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
     final List<dynamic> violationLogs = (item['violation_logs'] as List?) ?? const [];
     final unlockedByName = item['unlocked_by_name']?.toString();
+    final List<String> unlockedByNames = ((item['unlocked_by_names'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final String? unlockersSummary = unlockedByNames.isNotEmpty
+        ? unlockedByNames.join(', ')
+        : (unlockedByName != null && unlockedByName.isNotEmpty ? unlockedByName : null);
     final lockReason = item['lock_reason']?.toString();
     final bool wasUnlocked = item['was_unlocked'] == true;
     final bool effectiveLocked = isLocked || (violationsCount > 0 && !isCompleted && !wasUnlocked);
+
+    IconData formatViolationIcon(String? eventType) {
+      switch (eventType) {
+        case 'app_minimize':
+        case 'app_switch':
+        case 'tab_switch':
+          return Icons.exit_to_app_rounded;
+        case 'overlay_detected':
+        case 'notification_pulldown':
+          return Icons.layers_rounded;
+        case 'split_screen':
+          return Icons.splitscreen_rounded;
+        case 'screenshot_attempt':
+          return Icons.screenshot_monitor_rounded;
+        case 'external_display':
+          return Icons.cast_connected_rounded;
+        case 'bluetooth_enabled':
+          return Icons.bluetooth_connected_rounded;
+        case 'proctor_kick':
+          return Icons.gavel_rounded;
+        default:
+          return Icons.warning_amber_rounded;
+      }
+    }
 
     String formatViolationLabel(String? eventType) {
       switch (eventType) {
@@ -2088,7 +2119,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
           : 'Sesi Terkunci /\nDihentikan Pengawas';
       integrityColor = AppTheme.dangerRed;
     } else if (violationsCount > 0) {
-      integrityText = '$violationsCount Pelanggaran\n(Telah Dibuka Pengawas${unlockedByName != null ? ': $unlockedByName' : ''})';
+      integrityText = '$violationsCount Pelanggaran\n(Telah Dibuka Pengawas${unlockersSummary != null ? ': $unlockersSummary' : ''})';
       integrityColor = const Color(0xFFF59E0B);
     } else if (isEnded && elapsedSec <= 0) {
       integrityText = 'Tidak Mengerjakan\n(Waktu Ujian Berakhir)';
@@ -2297,247 +2328,321 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
                 if (hasWarningTab) ...[
                   Container(
+                    height: 42,
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setSheetState(() => activeDetailTab = 0),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 9),
-                              decoration: BoxDecoration(
-                                color: activeDetailTab == 0
-                                    ? (isDark ? const Color(0xFF0F172A) : Colors.white)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.info_outline_rounded,
-                                    size: 15,
-                                    color: activeDetailTab == 0
-                                        ? AppTheme.primaryGlow
-                                        : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Info Ujian',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: activeDetailTab == 0
-                                          ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
-                                          : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final tabWidth = constraints.maxWidth / 2;
+                        return Stack(
+                          children: [
+                            AnimatedPositioned(
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOutCubic,
+                              left: activeDetailTab == 0 ? 0 : tabWidth,
+                              top: 0,
+                              bottom: 0,
+                              width: tabWidth,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () => setSheetState(() => activeDetailTab = 1),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 9),
-                              decoration: BoxDecoration(
-                                color: activeDetailTab == 1
-                                    ? (isDark ? const Color(0xFF0F172A) : Colors.white)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(9),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.warning_amber_rounded,
-                                    size: 15,
-                                    color: activeDetailTab == 1
-                                        ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
-                                        : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    violationsCount > 0 ? 'Peringatan ($violationsCount)' : 'Peringatan',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: activeDetailTab == 1
-                                          ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
-                                          : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => setSheetState(() => activeDetailTab = 0),
+                                    child: Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.info_outline_rounded,
+                                            size: 15,
+                                            color: activeDetailTab == 0
+                                                ? AppTheme.primaryGlow
+                                                : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'Info Ujian',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: activeDetailTab == 0
+                                                  ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
+                                                  : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                Expanded(
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => setSheetState(() => activeDetailTab = 1),
+                                    child: Center(
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.warning_amber_rounded,
+                                            size: 15,
+                                            color: activeDetailTab == 1
+                                                ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
+                                                : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            violationsCount > 0 ? 'Peringatan ($violationsCount)' : 'Peringatan',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: activeDetailTab == 1
+                                                  ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
+                                                  : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 12),
                 ],
 
-                // Tab 0: Info Rows
-                if (!hasWarningTab || activeDetailTab == 0)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.surfaceDark : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildHistoryDetailRow(ctx, 'Lama Pengerjaan:', formatDurationSpent(elapsedSec), valueColor: AppTheme.primaryGlow),
-                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                        _buildHistoryDetailRow(ctx, 'Batas Alokasi Waktu:', FormatUtils.formatDurationHoursMinutes(duration)),
-                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                        _buildHistoryDetailRow(
-                          ctx,
-                          (isEnded && elapsedSec <= 0) ? 'Jadwal Mulai:' : 'Waktu Mulai:',
-                          formatDate(startTime),
-                        ),
-                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                        _buildHistoryDetailRow(
-                          ctx,
-                          isCompleted
-                              ? 'Waktu Selesai:'
-                              : (isEnded ? 'Waktu Berakhir:' : 'Aktivitas Terakhir:'),
-                          formatDate(endTime),
-                        ),
-                        Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
-                        _buildHistoryDetailRow(
-                          ctx,
-                          'Riwayat Integritas:',
-                          integrityText,
-                          valueColor: integrityColor,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Tab 1: Peringatan & Pelanggaran
-                if (hasWarningTab && activeDetailTab == 1)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.surfaceDark : const Color(0xFFFFFBEB),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: effectiveLocked
-                            ? AppTheme.dangerRed.withOpacity(0.35)
-                            : const Color(0xFFF59E0B).withOpacity(0.35),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.shield_outlined,
-                              size: 16,
-                              color: effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Rincian Pelanggaran & Pembukaan',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : AppTheme.textPrimaryLight,
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 240),
+                    switchInCurve: Curves.easeOutCubic,
+                    switchOutCurve: Curves.easeInCubic,
+                    transitionBuilder: (child, animation) {
+                      final isWarningPane = child.key == const ValueKey('tab_warning');
+                      final beginOffset = isWarningPane
+                          ? const Offset(0.18, 0)
+                          : const Offset(-0.18, 0);
+                      return SlideTransition(
+                        position: Tween<Offset>(begin: beginOffset, end: Offset.zero).animate(animation),
+                        child: FadeTransition(opacity: animation, child: child),
+                      );
+                    },
+                    child: (!hasWarningTab || activeDetailTab == 0)
+                        ? Container(
+                            key: const ValueKey('tab_info'),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isDark ? AppTheme.surfaceDark : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                               ),
                             ),
-                          ],
-                        ),
-                        if (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Dibuka kembali oleh: $unlockedByName',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                            child: Column(
+                              children: [
+                                _buildHistoryDetailRow(ctx, 'Lama Pengerjaan:', formatDurationSpent(elapsedSec), valueColor: AppTheme.primaryGlow),
+                                Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                                _buildHistoryDetailRow(ctx, 'Batas Alokasi Waktu:', FormatUtils.formatDurationHoursMinutes(duration)),
+                                Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                                _buildHistoryDetailRow(
+                                  ctx,
+                                  (isEnded && elapsedSec <= 0) ? 'Jadwal Mulai:' : 'Waktu Mulai:',
+                                  formatDate(startTime),
+                                ),
+                                Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                                _buildHistoryDetailRow(
+                                  ctx,
+                                  isCompleted
+                                      ? 'Waktu Selesai:'
+                                      : (isEnded ? 'Waktu Berakhir:' : 'Aktivitas Terakhir:'),
+                                  formatDate(endTime),
+                                ),
+                                Divider(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0), height: 16),
+                                _buildHistoryDetailRow(
+                                  ctx,
+                                  'Riwayat Integritas:',
+                                  integrityText,
+                                  valueColor: integrityColor,
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                        if (effectiveLocked && lockReason != null && lockReason.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            'Keterangan: $lockReason',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: AppTheme.dangerRed,
-                            ),
-                          ),
-                        ],
-                        if (violationLogs.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 200),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: violationLogs.map((rawLog) {
-                                  final log = rawLog is Map ? Map<String, dynamic>.from(rawLog) : <String, dynamic>{};
-                                  final eventLabel = formatViolationLabel(log['event_type']?.toString());
-                                  final details = log['details']?.toString();
-                                  final occurredAt = formatDate(log['occurred_at']);
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        const Padding(
-                                          padding: EdgeInsets.only(top: 4),
-                                          child: Icon(Icons.circle, size: 6, color: AppTheme.dangerRed),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                '$eventLabel • $occurredAt',
-                                                style: TextStyle(
-                                                  fontSize: 11.5,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: isDark ? Colors.white : AppTheme.textPrimaryLight,
-                                                ),
-                                              ),
-                                              if (details != null && details.isNotEmpty)
-                                                Text(
-                                                  details,
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
-                                                  ),
-                                                ),
-                                            ],
+                          )
+                        : Column(
+                            key: const ValueKey('tab_warning'),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (unlockersSummary != null || (effectiveLocked && lockReason != null && lockReason.isNotEmpty))
+                                Container(
+                                  width: double.infinity,
+                                  margin: const EdgeInsets.only(bottom: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: effectiveLocked
+                                        ? (isDark ? const Color(0xFF2A0A0A) : const Color(0xFFFEF2F2))
+                                        : (isDark ? const Color(0xFF06281D) : const Color(0xFFECFDF5)),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: effectiveLocked
+                                          ? AppTheme.dangerRed.withOpacity(0.35)
+                                          : const Color(0xFF10B981).withOpacity(0.35),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        effectiveLocked ? Icons.lock_outline_rounded : Icons.lock_open_rounded,
+                                        size: 16,
+                                        color: effectiveLocked ? AppTheme.dangerRed : const Color(0xFF059669),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          effectiveLocked
+                                              ? 'Status Terkunci: ${lockReason ?? 'Pelanggaran terdeteksi'}'
+                                              : 'Pembuka Sesi: $unlockersSummary',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: effectiveLocked
+                                                ? AppTheme.dangerRed
+                                                : (isDark ? const Color(0xFF34D399) : const Color(0xFF047857)),
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (violationLogs.isNotEmpty)
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxHeight: 240),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    itemCount: violationLogs.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                    itemBuilder: (_, idx) {
+                                      final rawLog = violationLogs[idx];
+                                      final log = rawLog is Map ? Map<String, dynamic>.from(rawLog) : <String, dynamic>{};
+                                      final eventType = log['event_type']?.toString();
+                                      final eventLabel = formatViolationLabel(eventType);
+                                      final details = log['details']?.toString();
+                                      final occurredAt = formatDate(log['occurred_at']);
+                                      final logUnlocker = log['unlocked_by_name']?.toString();
+                                      final logUnlockedAt = log['unlocked_at'] != null ? formatDate(log['unlocked_at']) : null;
+
+                                      return Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? AppTheme.surfaceDark : const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              width: 34,
+                                              height: 34,
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.dangerRed.withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(10),
+                                              ),
+                                              child: Icon(
+                                                formatViolationIcon(eventType),
+                                                size: 18,
+                                                color: AppTheme.dangerRed,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    eventLabel,
+                                                    style: TextStyle(
+                                                      fontSize: 12.5,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: isDark ? Colors.white : AppTheme.textPrimaryLight,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    occurredAt,
+                                                    style: TextStyle(
+                                                      fontSize: 10.5,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                                    ),
+                                                  ),
+                                                  if (details != null && details.isNotEmpty) ...[
+                                                    const SizedBox(height: 5),
+                                                    Text(
+                                                      details,
+                                                      style: TextStyle(
+                                                        fontSize: 11.5,
+                                                        height: 1.35,
+                                                        color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                  if (logUnlocker != null && logUnlocker.isNotEmpty) ...[
+                                                    const SizedBox(height: 6),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFF10B981).withOpacity(0.12),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                      ),
+                                                      child: Text(
+                                                        'Dibuka: $logUnlocker${logUnlockedAt != null ? ' • $logUnlockedAt' : ''}',
+                                                        style: TextStyle(
+                                                          fontSize: 10.5,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                            ],
                           ),
-                        ],
-                      ],
-                    ),
                   ),
+                ),
                 const SizedBox(height: 18),
 
                 ElevatedButton(
