@@ -179,13 +179,13 @@ class LockdownService with WidgetsBindingObserver {
     onPhoneCallChanged?.call(isCall);
     debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
 
-    // When a call starts/rings, keep LockTask active (semi-pin: Home & Recent Apps remain blocked)
-    // while releasing overlay/status-bar restrictions so the student can answer/end the call,
-    // then restore full bar & overlay lockdown once the call finishes.
+    // When a call starts/rings, open a brief 6s Call Control Window (unpins & drops down notification
+    // shade so the student can tap Answer/Decline or view incoming call screen), then automatically
+    // pull Shiei back to front and re-pin LockTask once so Recent Apps / app list stay blocked.
     if (isCall) {
       _needsRePinAfterCall = true;
       await VolumeLockService.stopVolumeLock(restoreVolume: true, clearSnapshot: false);
-      await VolumeLockService.openCallControlWindow(durationMs: 0);
+      await VolumeLockService.openCallControlWindow(durationMs: 6000);
     } else {
       _lastPhoneCallEndedAt = DateTime.now();
       await VolumeLockService.resetOverlayTouchDetection();

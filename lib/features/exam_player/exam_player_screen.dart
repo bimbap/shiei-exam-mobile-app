@@ -1356,11 +1356,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                       ),
                     ),
                     onPressed: () async {
-                      await VolumeLockService.openCallControlWindow(durationMs: 0);
+                      await VolumeLockService.openCallControlWindow(durationMs: 6000);
                     },
                     icon: const Icon(Icons.notifications_active_rounded, size: 18),
                     label: const Text(
-                      'Buka Panel Panggilan',
+                      'Buka Panel Panggilan (6 Detik)',
                       style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                     ),
                   ),
