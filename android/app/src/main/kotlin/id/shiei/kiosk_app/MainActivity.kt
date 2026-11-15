@@ -201,10 +201,10 @@ class MainActivity : FlutterActivity() {
                     if (!isCurrentlyInLockTask()) {
                         if (now - lastLockTaskAttemptTime > 3000L) {
                             lastLockTaskAttemptTime = now
-                            pendingRePinAfterCall = false
                             startLockTask()
                         }
-                    } else {
+                    }
+                    if (isCurrentlyInLockTask()) {
                         pendingRePinAfterCall = false
                     }
                     isKioskSystemBarsBlocked = true
@@ -1597,6 +1597,17 @@ class MainActivity : FlutterActivity() {
         isActivityStopped = false
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (pendingRePinAfterCall && !isCallControlWindowOpen) {
+            if (isCurrentlyInLockTask()) {
+                pendingRePinAfterCall = false
+            } else {
+                tryRePinLockTask()
+            }
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         isActivityStopped = true
@@ -1639,7 +1650,11 @@ class MainActivity : FlutterActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             if (pendingRePinAfterCall && !isCallControlWindowOpen) {
-                tryRePinLockTask()
+                if (isCurrentlyInLockTask()) {
+                    pendingRePinAfterCall = false
+                } else {
+                    tryRePinLockTask()
+                }
             }
         } else {
             if (isKioskSystemBarsBlocked && !isCallControlWindowOpen) {

@@ -26,9 +26,16 @@ class LockdownService with WidgetsBindingObserver {
   bool _isOnPhoneCall = false;
   bool _needsRePinAfterCall = false;
   DateTime? _lastPhoneCallEndedAt;
+  DateTime? _callWindowOpenedUntil;
   bool _isCharging = false;
   StreamSubscription<dynamic>? _screenshotSubscription;
   void Function(bool isOnCall)? onPhoneCallChanged;
+  VoidCallback? onCallWindowClosed;
+
+  void notifyCallControlWindowOpened(Duration duration) {
+    _callWindowOpenedUntil = DateTime.now().add(duration);
+    _needsRePinAfterCall = true;
+  }
 
   static const EventChannel _screenshotEventChannel =
       EventChannel('id.shiei/lockdown_events');
@@ -52,8 +59,10 @@ class LockdownService with WidgetsBindingObserver {
     _isOnPhoneCall = false;
     _needsRePinAfterCall = false;
     _lastPhoneCallEndedAt = null;
+    _callWindowOpenedUntil = null;
     _isCharging = false;
     onPhoneCallChanged = null;
+    onCallWindowClosed = null;
 
     // Keep screen awake during exam
     WakelockPlus.enable();
@@ -124,8 +133,10 @@ class LockdownService with WidgetsBindingObserver {
     _isOnPhoneCall = false;
     _needsRePinAfterCall = false;
     _lastPhoneCallEndedAt = null;
+    _callWindowOpenedUntil = null;
     _isCharging = false;
     onPhoneCallChanged = null;
+    onCallWindowClosed = null;
 
     // Stop native Kiosk mode pinning, restore system brightness, and conditionally restore pre-exam volume
     // (only restore pre-exam volume on normal completion; keep 100% when caught cheating!).
@@ -265,7 +276,17 @@ class LockdownService with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       await VolumeLockService.resetOverlayTouchDetection();
       await checkPhoneCallState();
-      if (!_isOnPhoneCall && _needsRePinAfterCall) {
+      if (_isOnPhoneCall && _callWindowOpenedUntil != null) {
+        // Student returned to Shiei after opening the call control window:
+        // immediately close the window and re-pin so they cannot exit again repeatedly.
+        _callWindowOpenedUntil = null;
+        onCallWindowClosed?.call();
+        final bypassActive = await TokenStorage.isAppExitBypassEnabled();
+        if (!bypassActive) {
+          await VolumeLockService.closeCallControlWindowAndRePin();
+          await VolumeLockService.setKioskSystemBarsBlocked(true);
+        }
+      } else if (!_isOnPhoneCall && _needsRePinAfterCall) {
         await _rePinAfterCallIfNeeded();
       }
       return;
@@ -276,11 +297,25 @@ class LockdownService with WidgetsBindingObserver {
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
     final bool inPostCallGrace = _lastPhoneCallEndedAt != null &&
         DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 10);
+    final bool inManualCallWindow = _callWindowOpenedUntil != null &&
+        DateTime.now().isBefore(_callWindowOpenedUntil!);
     if (isPhoneCall || inPostCallGrace) {
       if (isPhoneCall) {
         await _syncPhoneCallState(true);
       }
-      debugPrint('[LockdownService] Voice call active or post-call grace window. Waiting for call window re-pin / hangup.');
+      // Allow leaving only during an explicitly opened 10s Call Control Window (or 10s post-call return).
+      // Any attempt to minimize/leave outside that window while on a call triggers app_minimize.
+      if (state == AppLifecycleState.paused && !inManualCallWindow && !inPostCallGrace) {
+        final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+        if (!isExitBypass) {
+          handleViolation(
+            eventType: 'app_minimize',
+            details: 'Siswa keluar dari aplikasi ujian di luar jendela kontrol panggilan.',
+          );
+        }
+        return;
+      }
+      debugPrint('[LockdownService] Voice call active within control window or post-call grace.');
       return;
     }
 

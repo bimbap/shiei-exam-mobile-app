@@ -170,6 +170,12 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
         });
       }
     };
+    _lockdown.onCallWindowClosed = () {
+      _callWindowCountdownTimer?.cancel();
+      if (mounted && _callWindowSecondsLeft != 0) {
+        setState(() => _callWindowSecondsLeft = 0);
+      }
+    };
     VolumeLockService.isPhoneCallActive().then((onCall) {
       _setWebViewBlur(onCall);
       if (mounted && onCall != _isOnPhoneCall) {
@@ -1303,6 +1309,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   void _openCallControlWindowWithCountdown() {
     _callWindowCountdownTimer?.cancel();
     setState(() => _callWindowSecondsLeft = 10);
+    _lockdown.notifyCallControlWindowOpened(const Duration(seconds: 10));
     VolumeLockService.openCallControlWindow(durationMs: 10000);
     _callWindowCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
