@@ -222,24 +222,19 @@ class MainActivity : FlutterActivity() {
         callWindowHandler.postDelayed(runnable, 150L)
     }
 
-    private fun openCallControlWindow(durationMs: Long = 6000L) {
+    private fun openCallControlWindow(durationMs: Long = 0L) {
         callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
         rePinRunnable?.let { callWindowHandler.removeCallbacks(it) }
         rePinRunnable = null
-        lastLockTaskAttemptTime = 0L
         isCallControlWindowOpen = true
-        pendingRePinAfterCall = true
+        pendingRePinAfterCall = false
         isKioskSystemBarsBlocked = false
         resetOverlayFlags()
         applyOverlayProtection(false)
         restoreNormalSystemBars()
-        try {
-            if (isCurrentlyInLockTask()) {
-                stopLockTask()
-            }
-        } catch (_: Exception) {}
 
         // Expand top notification panel after brief delay so student can tap Answer / End Call
+        // while keeping LockTask active (semi-pin: Home & Recent Apps remain blocked).
         callWindowHandler.postDelayed({
             if (isCallControlWindowOpen) {
                 expandNotificationShade()
@@ -260,14 +255,18 @@ class MainActivity : FlutterActivity() {
         callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
         callWindowCloseRunnable = null
         isCallControlWindowOpen = false
-        pendingRePinAfterCall = true
         isKioskSystemBarsBlocked = true
         resetOverlayFlags()
         applyOverlayProtection(true)
         collapseStatusBar()
         enforceKioskSystemBars()
         bringMainActivityToFront()
-        tryRePinLockTask()
+        if (!isCurrentlyInLockTask()) {
+            pendingRePinAfterCall = true
+            tryRePinLockTask()
+        } else {
+            pendingRePinAfterCall = false
+        }
     }
 
     private fun initCallDetection() {
