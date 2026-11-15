@@ -2393,7 +2393,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: violationLogs.map((rawLog) {
-                                  final log = rawLog as Map<String, dynamic>;
+                                  final log = rawLog is Map ? Map<String, dynamic>.from(rawLog) : <String, dynamic>{};
                                   final eventLabel = formatViolationLabel(log['event_type']?.toString());
                                   final details = log['details']?.toString();
                                   final occurredAt = formatDate(log['occurred_at']);

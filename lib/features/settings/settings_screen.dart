@@ -366,43 +366,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _serverUrlController,
-                  enabled: !_isLoggedIn || _isAdmin,
+                  enabled: !_isLoggedIn,
                   onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
                   decoration: const InputDecoration(
                     hintText: 'Contoh: 192.168.1.100:8000 atau https://exam.sekolah.sch.id',
                     prefixIcon: Icon(Icons.link_rounded, color: AppTheme.primaryGlow),
                   ),
                 ),
-                if (_isLoggedIn && !_isAdmin) ...[
+                if (_isLoggedIn) ...[
                   const SizedBox(height: 8),
                   Text(
                     'Alamat server dikunci selama sesi aktif. Logout dulu untuk mengganti server.',
                     style: TextStyle(fontSize: 11, color: textColor),
                   ),
+                ] else ...[
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 42),
+                      backgroundColor: AppTheme.primaryShiei,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: _isSavingServer
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.save_rounded, size: 18),
+                    label: Text(
+                      _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: _isSavingServer ? null : _saveServerUrl,
+                  ),
                 ],
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 42),
-                    backgroundColor: AppTheme.primaryShiei,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: _isSavingServer
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save_rounded, size: 18),
-                  label: Text(
-                    _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: (_isSavingServer || (_isLoggedIn && !_isAdmin)) ? null : _saveServerUrl,
-                ),
               ],
             ),
           ),
