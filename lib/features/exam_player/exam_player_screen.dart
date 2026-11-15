@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -1281,9 +1282,14 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   }
 
   Widget _buildPhoneCallShield(bool isDark) {
-    return Container(
-      color: isDark ? Colors.black.withValues(alpha: 0.94) : const Color(0xFF0F172A).withValues(alpha: 0.92),
-      child: SafeArea(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          color: isDark
+              ? Colors.black.withValues(alpha: 0.86)
+              : const Color(0xFF0F172A).withValues(alpha: 0.84),
+          child: SafeArea(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -1339,11 +1345,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                       ),
                     ),
                     onPressed: () async {
-                      await VolumeLockService.openCallControlWindow(durationMs: 10000);
+                      await VolumeLockService.openCallControlWindow(durationMs: 0);
                     },
                     icon: const Icon(Icons.notifications_active_rounded, size: 18),
                     label: const Text(
-                      'Jawab / Buka Panel Panggilan (10 Detik)',
+                      'Buka Panel Panggilan',
                       style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -1351,6 +1357,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
               ],
             ),
           ),
+        ),
+      ),
         ),
       ),
     );

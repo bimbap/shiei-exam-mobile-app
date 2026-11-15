@@ -243,11 +243,14 @@ class MainActivity : FlutterActivity() {
             }
         }, 250L)
 
-        val closeTask = Runnable {
-            closeCallControlWindowAndRePin()
+        callWindowCloseRunnable = null
+        if (durationMs > 0L) {
+            val closeTask = Runnable {
+                closeCallControlWindowAndRePin()
+            }
+            callWindowCloseRunnable = closeTask
+            callWindowHandler.postDelayed(closeTask, durationMs)
         }
-        callWindowCloseRunnable = closeTask
-        callWindowHandler.postDelayed(closeTask, durationMs)
     }
 
     private fun closeCallControlWindowAndRePin() {
