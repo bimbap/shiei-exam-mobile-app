@@ -1943,8 +1943,38 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 padding: const EdgeInsets.all(32.0),
                 child: Column(
                   children: [
-                    const Icon(Icons.assignment_turned_in_outlined, size: 48, color: AppTheme.accentGreen),
-                    const SizedBox(height: 12),
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.primaryShiei.withValues(alpha: isDark ? 0.22 : 0.14),
+                            AppTheme.accentGreen.withValues(alpha: isDark ? 0.16 : 0.10),
+                          ],
+                        ),
+                        border: Border.all(
+                          color: AppTheme.primaryShiei.withValues(alpha: isDark ? 0.38 : 0.25),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.primaryShiei.withValues(alpha: isDark ? 0.18 : 0.08),
+                            blurRadius: 18,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.event_available_rounded,
+                        size: 32,
+                        color: AppTheme.primaryGlow,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     Text(
                       'Semua Ujian Telah Selesai',
                       style: TextStyle(
