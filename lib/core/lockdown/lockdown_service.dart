@@ -266,27 +266,6 @@ class LockdownService with WidgetsBindingObserver {
     if (isPhoneCall || inPostCallGrace) {
       if (isPhoneCall) {
         await _syncPhoneCallState(true);
-        // If student left Shiei to a full-screen call screen (paused), pull Shiei back to front & re-pin
-        // after 6s, and kick if they remain outside Shiei in another app/tab after 10.5s.
-        if (state == AppLifecycleState.paused) {
-          await Future.delayed(const Duration(milliseconds: 6000));
-          if (!_isLockdownActive || _isHandlingViolation) return;
-          if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
-            await VolumeLockService.bringAppToFront();
-            await VolumeLockService.closeCallControlWindowAndRePin();
-            await Future.delayed(const Duration(milliseconds: 4500));
-            if (!_isLockdownActive || _isHandlingViolation) return;
-            if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
-              final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
-              if (!isExitBypass) {
-                handleViolation(
-                  eventType: 'app_minimize',
-                  details: 'Siswa keluar dari aplikasi ujian / berpindah tab saat panggilan telepon berlangsung.',
-                );
-              }
-            }
-          }
-        }
       }
       debugPrint('[LockdownService] Voice call active or post-call grace window. Bypassing immediate lockout ejection.');
       return; // Do NOT trigger immediate app_minimize or overlay_detected
