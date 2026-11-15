@@ -130,6 +130,17 @@ class StudentDetailModal {
 
     final dynamic rawCall = item['is_on_call'] ?? (item['metadata'] is Map ? item['metadata']['is_on_call'] : null);
     final bool isOnCall = rawCall == true || rawCall == 1 || rawCall == '1' || rawCall?.toString().toLowerCase() == 'true';
+    final callLogs = item['call_logs'] is List ? (item['call_logs'] as List) : const [];
+    String callDurationLabel = '';
+    if (isOnCall && item['phone_call_started_at'] != null) {
+      final dt = DateTime.tryParse(item['phone_call_started_at'].toString());
+      if (dt != null) {
+        final sec = DateTime.now().difference(dt.toLocal()).inSeconds.clamp(0, 86400);
+        final mins = (sec ~/ 60).toString().padLeft(2, '0');
+        final rem = (sec % 60).toString().padLeft(2, '0');
+        callDurationLabel = ' • $mins:$rem';
+      }
+    }
     final extraMins = item['extra_minutes'] is int ? item['extra_minutes'] as int : int.tryParse(item['extra_minutes']?.toString() ?? '') ?? 0;
     final score = item['score'];
 
@@ -612,19 +623,25 @@ class StudentDetailModal {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: isOnCall
-                              ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                              : const Color(0xFF10B981).withValues(alpha: 0.12),
+                              ? const Color(0xFF0284C7).withValues(alpha: 0.14)
+                              : (callLogs.isNotEmpty
+                                  ? const Color(0xFF0284C7).withValues(alpha: 0.08)
+                                  : const Color(0xFF10B981).withValues(alpha: 0.12)),
                           borderRadius: BorderRadius.circular(6),
                           border: isOnCall
-                              ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 0.8)
+                              ? Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.45), width: 0.8)
                               : null,
                         ),
                         child: Text(
-                          isOnCall ? 'SEDANG TELPONAN ⚠️' : 'Tidak Ada',
+                          isOnCall
+                              ? 'SEDANG TELPONAN$callDurationLabel'
+                              : (callLogs.isNotEmpty ? '${callLogs.length}x Panggilan' : 'Tidak Ada'),
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.bold,
-                            color: isOnCall ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                            color: (isOnCall || callLogs.isNotEmpty)
+                                ? const Color(0xFF0284C7)
+                                : const Color(0xFF10B981),
                           ),
                         ),
                       ),
@@ -902,19 +919,25 @@ class StudentDetailModal {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: isOnCall
-                              ? const Color(0xFFEF4444).withValues(alpha: 0.15)
-                              : const Color(0xFF10B981).withValues(alpha: 0.12),
+                              ? const Color(0xFF0284C7).withValues(alpha: 0.14)
+                              : (callLogs.isNotEmpty
+                                  ? const Color(0xFF0284C7).withValues(alpha: 0.08)
+                                  : const Color(0xFF10B981).withValues(alpha: 0.12)),
                           borderRadius: BorderRadius.circular(6),
                           border: isOnCall
-                              ? Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 0.8)
+                              ? Border.all(color: const Color(0xFF0284C7).withValues(alpha: 0.45), width: 0.8)
                               : null,
                         ),
                         child: Text(
-                          isOnCall ? 'SEDANG TELPONAN ⚠️' : 'Tidak Ada',
+                          isOnCall
+                              ? 'SEDANG TELPONAN$callDurationLabel'
+                              : (callLogs.isNotEmpty ? '${callLogs.length}x Panggilan' : 'Tidak Ada'),
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.bold,
-                            color: isOnCall ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                            color: (isOnCall || callLogs.isNotEmpty)
+                                ? const Color(0xFF0284C7)
+                                : const Color(0xFF10B981),
                           ),
                         ),
                       ),

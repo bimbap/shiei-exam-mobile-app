@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -41,12 +42,47 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
   bool _isLoadingProctors = true;
   final TextEditingController _violationSearchController = TextEditingController();
   final TextEditingController _proctorSearchController = TextEditingController();
+  Timer? _callTicker;
+  DateTime _nowTick = DateTime.now();
+
+  void _syncCallTicker(List<Map<String, dynamic>> students) {
+    final hasActiveCall = students.any((s) =>
+        s['is_on_call'] == true ||
+        s['is_on_call'] == 1 ||
+        s['is_on_call']?.toString() == 'true');
+    if (hasActiveCall && _callTicker == null) {
+      _callTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) {
+          setState(() => _nowTick = DateTime.now());
+        }
+      });
+    } else if (!hasActiveCall && _callTicker != null) {
+      _callTicker?.cancel();
+      _callTicker = null;
+    }
+  }
+
+  String _formatCallDuration(int totalSeconds) {
+    final safe = totalSeconds < 0 ? 0 : totalSeconds;
+    final hrs = safe ~/ 3600;
+    final mins = (safe % 3600) ~/ 60;
+    final secs = safe % 60;
+    String pad(int n) => n.toString().padLeft(2, '0');
+    return hrs > 0 ? '${pad(hrs)}:${pad(mins)}:${pad(secs)}' : '${pad(mins)}:${pad(secs)}';
+  }
+
+  String _formatCallElapsed(dynamic startedAtIso) {
+    if (startedAtIso == null) return '';
+    final dt = DateTime.tryParse(startedAtIso.toString());
+    if (dt == null) return '';
+    return _formatCallDuration(_nowTick.difference(dt.toLocal()).inSeconds);
+  }
 
   @override
   void initState() {
     super.initState();
     _currentExam = Map<String, dynamic>.from(widget.exam);
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
         FocusManager.instance.primaryFocus?.unfocus();
@@ -103,6 +139,7 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
 
   @override
   void dispose() {
+    _callTicker?.cancel();
     _tabController.dispose();
     _studentSearchController.dispose();
     _violationSearchController.dispose();
@@ -201,6 +238,9 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
   Widget build(BuildContext context) {
     final isDark = AppTheme.isDark(context);
     final examId = _currentExam['id'];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncCallTicker(_examStudents);
+    });
     final title = _currentExam['title']?.toString() ?? 'Detail Ujian';
     final subject = _currentExam['subject']?.toString() ?? 'Umum';
     final token = _currentExam['token']?.toString() ?? '-';
@@ -684,6 +724,43 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                           ],
                         ),
                       ),
+                      Tab(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Log Telpon'),
+                            if (students.fold<int>(0, (sum, s) {
+                                  final logs = s['call_logs'];
+                                  final c = logs is List ? logs.length : 0;
+                                  final on = (s['is_on_call'] == true || s['is_on_call'] == 1) ? 1 : 0;
+                                  return sum + c + on;
+                                }) >
+                                0) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0284C7),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '${students.fold<int>(0, (sum, s) {
+                                    final logs = s['call_logs'];
+                                    final c = logs is List ? logs.length : 0;
+                                    final on = (s['is_on_call'] == true || s['is_on_call'] == 1) ? 1 : 0;
+                                    return sum + c + on;
+                                  })}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                       Tab(text: 'Pengawas (${_examProctors.length})'),
                     ],
                   ),
@@ -731,7 +808,13 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                       isExamEnded: isExamEnded,
                     ),
 
-                    // Tab 4: Pengawas Ujian
+                    // Tab 4: Log Telpon
+                    _buildCallLogsTab(
+                      isDark: isDark,
+                      students: students,
+                    ),
+
+                    // Tab 5: Pengawas Ujian
                     _buildProctorsTab(
                       isDark: isDark,
                       examId: examId,
@@ -1423,7 +1506,6 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
     final serial = user['serial_number']?.toString();
     final bool hasBoundDevice = (deviceName != null && deviceName.isNotEmpty) || (serial != null && serial.isNotEmpty);
     final extraMins = item['extra_minutes'] is int ? item['extra_minutes'] as int : int.tryParse(item['extra_minutes']?.toString() ?? '') ?? 0;
-    final score = item['score'];
     final rawBattery = item['battery_level'] ?? (item['metadata'] is Map ? item['metadata']['battery_level'] : null);
     final int? batteryLevel = rawBattery is int
         ? rawBattery
@@ -1480,7 +1562,7 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
       avatarBg = const Color(0xFF10B981).withValues(alpha: 0.12);
       iconColor = const Color(0xFF10B981);
       statusIcon = Icons.check_circle_rounded;
-      statusLabel = score != null ? 'SELESAI ($score)' : 'SELESAI';
+      statusLabel = 'SELESAI';
       statusBadgeBg = const Color(0xFF10B981).withValues(alpha: 0.12);
       statusBadgeTextColor = const Color(0xFF10B981);
     } else if (isExpired) {
@@ -1744,28 +1826,30 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                                    color: const Color(0xFF0284C7).withValues(alpha: 0.14),
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
-                                      color: const Color(0xFFEF4444).withValues(alpha: 0.5),
+                                      color: const Color(0xFF0284C7).withValues(alpha: 0.45),
                                       width: 0.8,
                                     ),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(
+                                      const Icon(
                                         Icons.phone_in_talk_rounded,
                                         size: 11,
-                                        color: Color(0xFFEF4444),
+                                        color: Color(0xFF0284C7),
                                       ),
-                                      SizedBox(width: 2.5),
+                                      const SizedBox(width: 2.5),
                                       Text(
-                                        'SEDANG TELPONAN',
-                                        style: TextStyle(
+                                        _formatCallElapsed(item['phone_call_started_at']).isNotEmpty
+                                            ? 'TELPONAN • ${_formatCallElapsed(item['phone_call_started_at'])}'
+                                            : 'TELPONAN',
+                                        style: const TextStyle(
                                           fontSize: 9.5,
                                           fontWeight: FontWeight.bold,
-                                          color: Color(0xFFEF4444),
+                                          color: Color(0xFF0284C7),
                                         ),
                                       ),
                                     ],
@@ -2451,6 +2535,203 @@ class _ExamDetailScreenState extends State<ExamDetailScreen> with SingleTickerPr
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCallLogsTab({
+    required bool isDark,
+    required List<Map<String, dynamic>> students,
+  }) {
+    final List<Map<String, dynamic>> entries = [];
+    for (final s in students) {
+      final user = s['user'] is Map ? Map<String, dynamic>.from(s['user']) : <String, dynamic>{};
+      final name = user['name']?.toString() ?? 'Siswa #${s['user_id'] ?? '-'}';
+      final nisn = user['nisn']?.toString() ?? user['username']?.toString() ?? '-';
+      final device = user['device_name']?.toString() ?? 'Perangkat';
+      final isOnCall = s['is_on_call'] == true || s['is_on_call'] == 1 || s['is_on_call']?.toString() == 'true';
+
+      if (isOnCall) {
+        final startedIso = s['phone_call_started_at']?.toString();
+        final startedDt = startedIso != null ? DateTime.tryParse(startedIso) : null;
+        final liveSec = startedDt != null ? _nowTick.difference(startedDt.toLocal()).inSeconds : 0;
+        entries.add({
+          'name': name,
+          'nisn': nisn,
+          'device': device,
+          'started_at': startedIso,
+          'ended_at': null,
+          'duration_seconds': liveSec < 0 ? 0 : liveSec,
+          'is_active': true,
+        });
+      }
+
+      final rawLogs = s['call_logs'];
+      if (rawLogs is List) {
+        for (final raw in rawLogs) {
+          if (raw is Map) {
+            entries.add({
+              'name': name,
+              'nisn': nisn,
+              'device': device,
+              'started_at': raw['started_at']?.toString(),
+              'ended_at': raw['ended_at']?.toString(),
+              'duration_seconds': int.tryParse(raw['duration_seconds']?.toString() ?? '') ?? 0,
+              'is_active': false,
+            });
+          }
+        }
+      }
+    }
+
+    entries.sort((a, b) {
+      if (a['is_active'] != b['is_active']) return a['is_active'] == true ? -1 : 1;
+      final dtA = DateTime.tryParse(a['started_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final dtB = DateTime.tryParse(b['started_at']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return dtB.compareTo(dtA);
+    });
+
+    String fmtTime(dynamic iso) {
+      if (iso == null) return '-';
+      final dt = DateTime.tryParse(iso.toString());
+      if (dt == null) return '-';
+      return '${DateFormat('HH:mm:ss', 'id_ID').format(dt.toLocal())} WIB';
+    }
+
+    return RefreshIndicator(
+      color: const Color(0xFF0284C7),
+      onRefresh: () => _fetchExamParticipants(silent: false),
+      child: entries.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(32),
+              children: [
+                const SizedBox(height: 40),
+                Icon(Icons.phone_in_talk_rounded, size: 44, color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                const SizedBox(height: 12),
+                Text(
+                  'Belum Ada Riwayat Panggilan',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Aktivitas panggilan suara / WhatsApp peserta selama ujian akan tercatat di sini beserta durasinya.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            )
+          : ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              itemCount: entries.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (ctx, idx) {
+                final item = entries[idx];
+                final isActive = item['is_active'] == true;
+                final durSec = (item['duration_seconds'] as int?) ?? 0;
+
+                return Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppTheme.surfaceDark : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive
+                          ? const Color(0xFF0284C7).withValues(alpha: 0.45)
+                          : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0284C7).withValues(alpha: isActive ? 0.18 : 0.10),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.phone_in_talk_rounded,
+                          size: 18,
+                          color: isActive ? const Color(0xFF0284C7) : const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item['name']?.toString() ?? '-',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                        ? const Color(0xFF0284C7).withValues(alpha: 0.14)
+                                        : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isActive ? 'BERLANGSUNG' : 'SELESAI',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: isActive
+                                          ? const Color(0xFF0284C7)
+                                          : (isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '${item['device']} • Mulai ${fmtTime(item['started_at'])}${isActive ? '' : ' • Selesai ${fmtTime(item['ended_at'])}'}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        _formatCallDuration(durSec),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                          color: isActive
+                              ? const Color(0xFF0284C7)
+                              : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 
