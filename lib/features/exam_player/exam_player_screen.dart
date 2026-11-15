@@ -1302,8 +1302,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
 
   void _openCallControlWindowWithCountdown() {
     _callWindowCountdownTimer?.cancel();
-    setState(() => _callWindowSecondsLeft = 6);
-    VolumeLockService.openCallControlWindow(durationMs: 6000);
+    setState(() => _callWindowSecondsLeft = 10);
+    VolumeLockService.openCallControlWindow(durationMs: 10000);
     _callWindowCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -1426,7 +1426,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                               ],
                             )
                           : const Text(
-                              'Buka Panel Panggilan (6 Detik)',
+                              'Buka Panel Panggilan (10 Detik)',
                               key: ValueKey('open_call_panel'),
                               style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                             ),

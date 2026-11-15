@@ -222,7 +222,7 @@ class MainActivity : FlutterActivity() {
         callWindowHandler.postDelayed(runnable, 150L)
     }
 
-    private fun openCallControlWindow(durationMs: Long = 0L) {
+    private fun openCallControlWindow(durationMs: Long = 10000L) {
         callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
         rePinRunnable?.let { callWindowHandler.removeCallbacks(it) }
         rePinRunnable = null
