@@ -55,6 +55,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   String? _lastProgressError;
   bool _isTrackingInterrupted = false;
   bool _isOnPhoneCall = false;
+  int _callWindowSecondsLeft = 0;
+  Timer? _callWindowCountdownTimer;
   int _consecutiveHeartbeatFailures = 0;
   int _examDurationMinutes = 60;
   int _extraMinutes = 0;
@@ -159,8 +161,14 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     );
     _lockdown.onPhoneCallChanged = (onCall) {
       _setWebViewBlur(onCall);
-      if (mounted && _isOnPhoneCall != onCall) {
-        setState(() => _isOnPhoneCall = onCall);
+      if (!onCall) {
+        _callWindowCountdownTimer?.cancel();
+      }
+      if (mounted && (_isOnPhoneCall != onCall || (!onCall && _callWindowSecondsLeft != 0))) {
+        setState(() {
+          _isOnPhoneCall = onCall;
+          if (!onCall) _callWindowSecondsLeft = 0;
+        });
       }
     };
     VolumeLockService.isPhoneCallActive().then((onCall) {
@@ -302,6 +310,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
 
   @override
   void dispose() {
+    _callWindowCountdownTimer?.cancel();
     _clockTimer?.cancel();
     _monitoringPoller?.cancel();
     _heartbeatTimer?.cancel();
@@ -1292,6 +1301,24 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     ctrl.evaluateJavascript(source: js).catchError((_) {});
   }
 
+  void _openCallControlWindowWithCountdown() {
+    _callWindowCountdownTimer?.cancel();
+    setState(() => _callWindowSecondsLeft = 6);
+    VolumeLockService.openCallControlWindow(durationMs: 6000);
+    _callWindowCountdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_callWindowSecondsLeft <= 1) {
+        timer.cancel();
+        setState(() => _callWindowSecondsLeft = 0);
+      } else {
+        setState(() => _callWindowSecondsLeft -= 1);
+      }
+    });
+  }
+
   Widget _buildPhoneCallShield(bool isDark) {
     return ClipRect(
       child: BackdropFilter(
@@ -1348,20 +1375,65 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0284C7),
+                      backgroundColor: _callWindowSecondsLeft > 0
+                          ? const Color(0xFF0369A1)
+                          : const Color(0xFF0284C7),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () async {
-                      await VolumeLockService.openCallControlWindow(durationMs: 0);
-                    },
-                    icon: const Icon(Icons.notifications_active_rounded, size: 18),
-                    label: const Text(
-                      'Buka Panel Panggilan',
-                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                    onPressed: _openCallControlWindowWithCountdown,
+                    icon: Icon(
+                      _callWindowSecondsLeft > 0
+                          ? Icons.timer_outlined
+                          : Icons.notifications_active_rounded,
+                      size: 18,
+                    ),
+                    label: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      transitionBuilder: (child, anim) => FadeTransition(
+                        opacity: anim,
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: const Offset(0, 0.25),
+                            end: Offset.zero,
+                          ).animate(anim),
+                          child: child,
+                        ),
+                      ),
+                      child: _callWindowSecondsLeft > 0
+                          ? Row(
+                              key: ValueKey('countdown_$_callWindowSecondsLeft'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Panel Panggilan Terbuka • Mengunci dalam ',
+                                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${_callWindowSecondsLeft}d',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w900,
+                                      fontFeatures: [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Text(
+                              'Buka Panel Panggilan (6 Detik)',
+                              key: ValueKey('open_call_panel'),
+                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                            ),
                     ),
                   ),
                 ),
