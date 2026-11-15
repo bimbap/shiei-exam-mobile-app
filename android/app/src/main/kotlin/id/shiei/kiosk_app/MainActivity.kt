@@ -65,6 +65,9 @@ class MainActivity : FlutterActivity() {
     private var isCallControlWindowOpen = false
     private val callWindowHandler = Handler(Looper.getMainLooper())
     private var callWindowCloseRunnable: Runnable? = null
+    private var rePinRunnable: Runnable? = null
+    private var lastLockTaskAttemptTime = 0L
+    private var lastSystemBarEnforceTime = 0L
     private var isKioskSystemBarsBlocked = false
     private var hasDetectedObscuredTouch = false
     private var lastObscuredTouchTime = 0L
@@ -186,31 +189,37 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun tryRePinLockTask() {
-        if (isCallControlWindowOpen) return
+        if (isCallControlWindowOpen || !pendingRePinAfterCall) return
         resetOverlayFlags()
-        val delays = longArrayOf(0L, 350L, 900L, 1600L)
-        for (delay in delays) {
-            callWindowHandler.postDelayed({
-                if (isCallControlWindowOpen || !pendingRePinAfterCall) return@postDelayed
-                if (window.decorView.hasWindowFocus()) {
-                    try {
-                        if (!isCurrentlyInLockTask()) {
+        rePinRunnable?.let { callWindowHandler.removeCallbacks(it) }
+        val runnable = Runnable {
+            rePinRunnable = null
+            if (isCallControlWindowOpen || !pendingRePinAfterCall) return@Runnable
+            if (window.decorView.hasWindowFocus()) {
+                try {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (!isCurrentlyInLockTask()) {
+                        if (now - lastLockTaskAttemptTime > 3000L) {
+                            lastLockTaskAttemptTime = now
+                            pendingRePinAfterCall = false
                             startLockTask()
                         }
-                        if (isCurrentlyInLockTask()) {
-                            pendingRePinAfterCall = false
-                        }
-                        isKioskSystemBarsBlocked = true
-                        applyOverlayProtection(true)
-                        enforceKioskSystemBars()
-                        collapseStatusBar()
-                        resetOverlayFlags()
-                    } catch (_: Exception) {}
-                } else {
-                    bringMainActivityToFront()
-                }
-            }, delay)
+                    } else {
+                        pendingRePinAfterCall = false
+                    }
+                    isKioskSystemBarsBlocked = true
+                    applyOverlayProtection(true)
+                    enforceKioskSystemBars()
+                    lastSystemBarEnforceTime = android.os.SystemClock.elapsedRealtime()
+                    collapseStatusBar()
+                    resetOverlayFlags()
+                } catch (_: Exception) {}
+            } else {
+                bringMainActivityToFront()
+            }
         }
+        rePinRunnable = runnable
+        callWindowHandler.postDelayed(runnable, 150L)
     }
 
     private fun openCallControlWindow(durationMs: Long = 10000L) {
@@ -1628,8 +1637,12 @@ class MainActivity : FlutterActivity() {
             }
         } else {
             if (isKioskSystemBarsBlocked && !isCallControlWindowOpen) {
-                collapseStatusBar()
-                enforceKioskSystemBars()
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastLockTaskAttemptTime >= 2500L && now - lastSystemBarEnforceTime > 600L) {
+                    lastSystemBarEnforceTime = now
+                    collapseStatusBar()
+                    enforceKioskSystemBars()
+                }
             }
             // If focus lost within 1200ms of pressing Volume Down, it was triggered by hardware screenshot shortcut
             if (System.currentTimeMillis() - lastVolumeDownTime < 1200L && screenshotEventSink != null) {

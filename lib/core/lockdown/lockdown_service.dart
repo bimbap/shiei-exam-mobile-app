@@ -163,7 +163,6 @@ class LockdownService with WidgetsBindingObserver {
     final bypassActive = await TokenStorage.isAppExitBypassEnabled();
     if (!bypassActive) {
       await VolumeLockService.closeCallControlWindowAndRePin();
-      await VolumeLockService.startLockTask();
       await VolumeLockService.setKioskSystemBarsBlocked(true);
     }
     await VolumeLockService.startVolumeLock();

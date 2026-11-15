@@ -9,6 +9,18 @@ class ExamListController extends ChangeNotifier {
   final ApiClient _api = ApiClient();
   final AuthService _auth = AuthService();
 
+  bool _isDisposed = false;
+
+  void _safeNotify() {
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
   bool _isLoading = true;
   bool _isHistoryLoading = false;
   bool _isProfileLoading = false;
@@ -39,7 +51,7 @@ class ExamListController extends ChangeNotifier {
     if (clearPrevious) {
       _exams = [];
     }
-    notifyListeners();
+    _safeNotify();
 
     _currentUser = await TokenStorage.getUser();
     if (_currentUser != null) {
@@ -55,11 +67,11 @@ class ExamListController extends ChangeNotifier {
       }
       await loadHistory(isManualRefresh: false);
       _isLoading = false;
-      notifyListeners();
+      _safeNotify();
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Gagal memuat jadwal ujian. Periksa koneksi ke server.';
-      notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -72,7 +84,7 @@ class ExamListController extends ChangeNotifier {
       _currentUser = null;
       _hasLoadedProfile = false;
     }
-    notifyListeners();
+    _safeNotify();
     try {
       final response = await _api.get(ApiEndpoints.userProfile);
       if (response.data != null && response.data['status'] == 'success') {
@@ -86,7 +98,7 @@ class ExamListController extends ChangeNotifier {
     } catch (_) {}
     _isProfileLoading = false;
     _isProfileManualRefreshing = false;
-    notifyListeners();
+    _safeNotify();
   }
 
   Future<void> loadHistory({bool isManualRefresh = false, bool clearPrevious = false}) async {
@@ -98,7 +110,7 @@ class ExamListController extends ChangeNotifier {
       _history = [];
       _hasLoadedHistory = false;
     }
-    notifyListeners();
+    _safeNotify();
     try {
       final response = await _api.get(ApiEndpoints.studentHistory);
       if (response.data['status'] == 'success') {
@@ -111,7 +123,7 @@ class ExamListController extends ChangeNotifier {
     }
     _isHistoryLoading = false;
     _isHistoryManualRefreshing = false;
-    notifyListeners();
+    _safeNotify();
   }
 
   Future<void> logout() async {
