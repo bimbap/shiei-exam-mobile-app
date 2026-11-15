@@ -321,6 +321,46 @@ class VolumeLockService {
   }
 
   /**
+   * Temporarily unpin Kiosk & expand the top notification panel for [durationMs] (default 5.5s)
+   * so the student can tap Answer / End Call on an incoming/active phone call, then automatically
+   * pull Shiei back to the foreground and re-pin LockTask even while the call continues.
+   */
+  static Future<bool> openCallControlWindow({int durationMs = 5500}) async {
+    try {
+      final bool success = await _channel.invokeMethod('openCallControlWindow', {
+        'durationMs': durationMs,
+      }) ?? false;
+      return success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Immediately close the temporary call control window, pull Shiei to front, and re-pin LockTask.
+   */
+  static Future<bool> closeCallControlWindowAndRePin() async {
+    try {
+      final bool success = await _channel.invokeMethod('closeCallControlWindowAndRePin') ?? false;
+      return success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * Bring Shiei MainActivity back to the foreground.
+   */
+  static Future<bool> bringAppToFront() async {
+    try {
+      final bool success = await _channel.invokeMethod('bringAppToFront') ?? false;
+      return success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Lock or unlock device orientation strictly to portrait upright mode.
    */
   static Future<bool> lockOrientationPortrait(bool lock) async {

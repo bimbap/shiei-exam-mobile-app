@@ -60,6 +60,10 @@ class MainActivity : FlutterActivity() {
     private var telecomManager: TelecomManager? = null
     private var isPhoneCallActive = false
     private var lastPhoneCallDetectedTime = 0L
+    private var pendingRePinAfterCall = false
+    private var isCallControlWindowOpen = false
+    private val callWindowHandler = Handler(Looper.getMainLooper())
+    private var callWindowCloseRunnable: Runnable? = null
     private var isKioskSystemBarsBlocked = false
     private var hasDetectedObscuredTouch = false
     private var lastObscuredTouchTime = 0L
@@ -115,20 +119,139 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun applyOverlayProtection(enable: Boolean) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                window.setHideOverlayWindows(enable)
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val flag = 0x00080000
-                if (enable) {
-                    window.addFlags(flag)
-                } else {
-                    window.clearFlags(flag)
+        runOnUiThread {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    window.setHideOverlayWindows(enable)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    val flag = 0x00080000
+                    if (enable) {
+                        window.addFlags(flag)
+                    } else {
+                        window.clearFlags(flag)
+                    }
                 }
+            } catch (e: Exception) {
+                // Ignore on unsupported devices
             }
-        } catch (e: Exception) {
-            // Ignore on unsupported devices
         }
+    }
+
+    private fun resetOverlayFlags() {
+        hasDetectedObscuredTouch = false
+        lastObscuredTouchTime = 0L
+        hasAnotherActivityTakenTopResume = false
+        lastTimeAnotherActivityTopResumed = 0L
+        isMultiWindowDetected = false
+        isPipDetected = false
+        lastTimeNotTopResumed = 0L
+    }
+
+    private fun isCurrentlyInLockTask(): Boolean {
+        return try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                am?.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+            } else {
+                @Suppress("DEPRECATION")
+                am?.isInLockTaskMode == true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun expandNotificationShade() {
+        try {
+            @Suppress("WrongConstant")
+            val statusBarService = getSystemService("statusbar") ?: return
+            val statusBarManager = Class.forName("android.app.StatusBarManager")
+            val expandMethod = statusBarManager.getMethod("expandNotificationsPanel")
+            expandMethod.invoke(statusBarService)
+        } catch (_: Exception) {}
+    }
+
+    private fun bringMainActivityToFront() {
+        try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+            am?.moveTaskToFront(taskId, 0)
+        } catch (_: Exception) {}
+        try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+        } catch (_: Exception) {}
+    }
+
+    private fun tryRePinLockTask() {
+        if (isCallControlWindowOpen) return
+        resetOverlayFlags()
+        val delays = longArrayOf(0L, 350L, 900L, 1600L)
+        for (delay in delays) {
+            callWindowHandler.postDelayed({
+                if (isCallControlWindowOpen || !pendingRePinAfterCall) return@postDelayed
+                if (window.decorView.hasWindowFocus()) {
+                    try {
+                        if (!isCurrentlyInLockTask()) {
+                            startLockTask()
+                        }
+                        if (isCurrentlyInLockTask()) {
+                            pendingRePinAfterCall = false
+                        }
+                        isKioskSystemBarsBlocked = true
+                        applyOverlayProtection(true)
+                        enforceKioskSystemBars()
+                        collapseStatusBar()
+                        resetOverlayFlags()
+                    } catch (_: Exception) {}
+                } else {
+                    bringMainActivityToFront()
+                }
+            }, delay)
+        }
+    }
+
+    private fun openCallControlWindow(durationMs: Long = 5500L) {
+        callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
+        isCallControlWindowOpen = true
+        pendingRePinAfterCall = true
+        isKioskSystemBarsBlocked = false
+        resetOverlayFlags()
+        applyOverlayProtection(false)
+        restoreNormalSystemBars()
+        try {
+            if (isCurrentlyInLockTask()) {
+                stopLockTask()
+            }
+        } catch (_: Exception) {}
+
+        // Expand top notification panel after brief delay so student can tap Answer / End Call
+        callWindowHandler.postDelayed({
+            if (isCallControlWindowOpen) {
+                expandNotificationShade()
+            }
+        }, 250L)
+
+        val closeTask = Runnable {
+            closeCallControlWindowAndRePin()
+        }
+        callWindowCloseRunnable = closeTask
+        callWindowHandler.postDelayed(closeTask, durationMs)
+    }
+
+    private fun closeCallControlWindowAndRePin() {
+        callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
+        callWindowCloseRunnable = null
+        isCallControlWindowOpen = false
+        pendingRePinAfterCall = true
+        isKioskSystemBarsBlocked = true
+        resetOverlayFlags()
+        applyOverlayProtection(true)
+        collapseStatusBar()
+        enforceKioskSystemBars()
+        bringMainActivityToFront()
+        tryRePinLockTask()
     }
 
     private fun initCallDetection() {
@@ -399,13 +522,17 @@ class MainActivity : FlutterActivity() {
                         var hasOverlay = false
                         var reason = ""
 
-                        // Priority Check: If a cellular or 3rd-party VoIP phone call is active or ringing,
-                        // it must be handled as a phone call event, NOT a generic floating window / overlay!
-                        if (checkIfPhoneOrVoipCallActive()) {
+                        // Priority Check: If a cellular or 3rd-party VoIP phone call is active, ringing,
+                        // or within the post-call grace window, clear stale overlay flags and do NOT treat as overlay!
+                        val callActiveNow = checkIfPhoneOrVoipCallActive()
+                        val recentCallGrace = lastPhoneCallDetectedTime > 0L &&
+                                (SystemClock.elapsedRealtime() - lastPhoneCallDetectedTime) < 8000L
+                        if (callActiveNow || isCallControlWindowOpen || recentCallGrace) {
+                            resetOverlayFlags()
                             result.success(mapOf(
                                 "has_overlay" to false,
                                 "reason" to "",
-                                "is_call_active" to true
+                                "is_call_active" to callActiveNow
                             ))
                             return@setMethodCallHandler
                         }
@@ -507,19 +634,33 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "resetOverlayTouchDetection" -> {
-                    hasDetectedObscuredTouch = false
-                    lastObscuredTouchTime = 0L
-                    hasAnotherActivityTakenTopResume = false
-                    lastTimeAnotherActivityTopResumed = 0L
-                    isMultiWindowDetected = false
-                    isPipDetected = false
-                    lastTimeNotTopResumed = 0L
+                    resetOverlayFlags()
+                    result.success(true)
+                }
+
+                "openCallControlWindow" -> {
+                    val durationMs = (call.argument<Number>("durationMs"))?.toLong() ?: 5500L
+                    openCallControlWindow(durationMs)
+                    result.success(true)
+                }
+
+                "closeCallControlWindowAndRePin" -> {
+                    closeCallControlWindowAndRePin()
+                    result.success(true)
+                }
+
+                "bringAppToFront" -> {
+                    bringMainActivityToFront()
                     result.success(true)
                 }
 
                 "startLockTask" -> {
                     try {
+                        pendingRePinAfterCall = true
                         startLockTask()
+                        if (isCurrentlyInLockTask()) {
+                            pendingRePinAfterCall = false
+                        }
                         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                         nm?.cancelAll()
                         enforceKioskSystemBars()
@@ -532,6 +673,10 @@ class MainActivity : FlutterActivity() {
 
                 "stopLockTask" -> {
                     try {
+                        callWindowCloseRunnable?.let { callWindowHandler.removeCallbacks(it) }
+                        callWindowCloseRunnable = null
+                        isCallControlWindowOpen = false
+                        pendingRePinAfterCall = false
                         stopLockTask()
                         result.success(true)
                     } catch (e: Exception) {
@@ -1418,9 +1563,12 @@ class MainActivity : FlutterActivity() {
             hasAnotherActivityTakenTopResume = false
             lastTimeAnotherActivityTopResumed = 0L
             lastTimeNotTopResumed = 0L
+            if (pendingRePinAfterCall && !isCallControlWindowOpen) {
+                tryRePinLockTask()
+            }
         } else {
             lastTimeNotTopResumed = System.currentTimeMillis()
-            if (!isActivityStopped) {
+            if (!isActivityStopped && !isCallControlWindowOpen && !checkIfPhoneOrVoipCallActive()) {
                 hasAnotherActivityTakenTopResume = true
                 lastTimeAnotherActivityTopResumed = System.currentTimeMillis()
             }
@@ -1429,8 +1577,12 @@ class MainActivity : FlutterActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus) {
-            if (isKioskSystemBarsBlocked) {
+        if (hasFocus) {
+            if (pendingRePinAfterCall && !isCallControlWindowOpen) {
+                tryRePinLockTask()
+            }
+        } else {
+            if (isKioskSystemBarsBlocked && !isCallControlWindowOpen) {
                 collapseStatusBar()
                 enforceKioskSystemBars()
             }

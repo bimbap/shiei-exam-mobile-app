@@ -1318,13 +1318,35 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nLayar ujian akan terbuka kembali setelah panggilan selesai.',
+                  'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nJawab atau akhiri panggilan melalui panel notifikasi atas. Dilarang keluar dari aplikasi Shiei atau berpindah tab selama panggilan berlangsung.',
                   style: TextStyle(
                     fontSize: 13,
                     color: Color(0xFFCBD5E1),
                     height: 1.45,
                   ),
                   textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () async {
+                      await VolumeLockService.openCallControlWindow(durationMs: 6500);
+                    },
+                    icon: const Icon(Icons.notifications_active_rounded, size: 18),
+                    label: const Text(
+                      'Jawab / Buka Panel Panggilan (6 Detik)',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ),
               ],
             ),

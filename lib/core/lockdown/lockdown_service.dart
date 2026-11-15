@@ -149,12 +149,15 @@ class LockdownService with WidgetsBindingObserver {
 
   Future<void> _rePinAfterCallIfNeeded() async {
     if (!_needsRePinAfterCall || !_isLockdownActive || _isOnPhoneCall) return;
-    await Future.delayed(const Duration(milliseconds: 450));
+    await VolumeLockService.resetOverlayTouchDetection();
+    await Future.delayed(const Duration(milliseconds: 350));
     if (!_needsRePinAfterCall || !_isLockdownActive || _isOnPhoneCall) return;
 
     _needsRePinAfterCall = false;
+    await VolumeLockService.resetOverlayTouchDetection();
     final bypassActive = await TokenStorage.isAppExitBypassEnabled();
     if (!bypassActive) {
+      await VolumeLockService.closeCallControlWindowAndRePin();
       await VolumeLockService.startLockTask();
       await VolumeLockService.setKioskSystemBarsBlocked(true);
     }
@@ -172,14 +175,16 @@ class LockdownService with WidgetsBindingObserver {
     onPhoneCallChanged?.call(isCall);
     debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
 
-    // Keep LockTask pinning engaged during a phone call so students cannot freely switch apps/tabs,
-    // while temporarily unblocking kiosk system bars & restoring volume so call controls work normally.
+    // When a call starts/rings, open a 6.5s Call Control Window (unpins & drops down notification shade
+    // so the student can tap Answer), then automatically pull Shiei back to front and re-pin LockTask
+    // while the call continues so students cannot switch tabs/apps during the call.
     if (isCall) {
       _needsRePinAfterCall = true;
-      await VolumeLockService.setKioskSystemBarsBlocked(false);
       await VolumeLockService.stopVolumeLock();
+      await VolumeLockService.openCallControlWindow(durationMs: 6500);
     } else {
       _lastPhoneCallEndedAt = DateTime.now();
+      await VolumeLockService.resetOverlayTouchDetection();
       await _rePinAfterCallIfNeeded();
     }
 
@@ -241,21 +246,46 @@ class LockdownService with WidgetsBindingObserver {
     if (!_isLockdownActive || _activeExamId == null || _isHandlingViolation) return;
 
     if (state == AppLifecycleState.resumed) {
+      await VolumeLockService.resetOverlayTouchDetection();
       await checkPhoneCallState();
+      if (!_isOnPhoneCall && _needsRePinAfterCall) {
+        await _rePinAfterCallIfNeeded();
+      }
       return;
     }
 
     // Check if app changed state due to an incoming or active phone call (WhatsApp, Discord, Cellular)
-    // or within a 3s post-call transition grace window.
+    // or within a 6s post-call transition grace window.
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
     final bool inPostCallGrace = _lastPhoneCallEndedAt != null &&
-        DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 3);
+        DateTime.now().difference(_lastPhoneCallEndedAt!) < const Duration(seconds: 6);
     if (isPhoneCall || inPostCallGrace) {
       if (isPhoneCall) {
         await _syncPhoneCallState(true);
+        // If student left Shiei to a full-screen call screen (paused), pull Shiei back to front & re-pin
+        // after 3.5s, and kick if they remain outside Shiei in another app/tab after 6.5s.
+        if (state == AppLifecycleState.paused) {
+          await Future.delayed(const Duration(milliseconds: 3500));
+          if (!_isLockdownActive || _isHandlingViolation) return;
+          if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
+            await VolumeLockService.bringAppToFront();
+            await VolumeLockService.closeCallControlWindowAndRePin();
+            await Future.delayed(const Duration(milliseconds: 3000));
+            if (!_isLockdownActive || _isHandlingViolation) return;
+            if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.paused) {
+              final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
+              if (!isExitBypass) {
+                handleViolation(
+                  eventType: 'app_minimize',
+                  details: 'Siswa keluar dari aplikasi ujian / berpindah tab saat panggilan telepon berlangsung.',
+                );
+              }
+            }
+          }
+        }
       }
-      debugPrint('[LockdownService] Voice call active or post-call grace window. Bypassing lockout ejection.');
-      return; // Do NOT trigger app_minimize or overlay_detected
+      debugPrint('[LockdownService] Voice call active or post-call grace window. Bypassing immediate lockout ejection.');
+      return; // Do NOT trigger immediate app_minimize or overlay_detected
     }
 
     if (state == AppLifecycleState.paused) {
