@@ -2586,7 +2586,6 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                             : ((!effectiveLocked && violationLogs.length == 1 && unlockedByName != null && unlockedByName.isNotEmpty)
                                                 ? unlockedByName
                                                 : null);
-                                        final logUnlockedAt = log['unlocked_at'] != null ? formatDate(log['unlocked_at']) : null;
 
                                         return Container(
                                           padding: const EdgeInsets.all(12),
@@ -2665,7 +2664,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                                             const SizedBox(width: 5),
                                                             Flexible(
                                                               child: Text(
-                                                                'Dibuka oleh: $logUnlocker${logUnlockedAt != null ? ' • $logUnlockedAt' : ''}',
+                                                                'Dibuka oleh: $logUnlocker',
                                                                 style: TextStyle(
                                                                   fontSize: 10.5,
                                                                   fontWeight: FontWeight.w600,
