@@ -52,6 +52,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   bool _isHandshakeInProgress = true;
   String? _handshakeErrorMessage;
   bool _isTrackingInterrupted = false;
+  bool _isOnPhoneCall = false;
   int _consecutiveHeartbeatFailures = 0;
   int _examDurationMinutes = 60;
   int _extraMinutes = 0;
@@ -154,6 +155,16 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
       examId: examId,
       context: context,
     );
+    _lockdown.onPhoneCallChanged = (onCall) {
+      if (mounted && _isOnPhoneCall != onCall) {
+        setState(() => _isOnPhoneCall = onCall);
+      }
+    };
+    VolumeLockService.isPhoneCallActive().then((onCall) {
+      if (mounted && onCall != _isOnPhoneCall) {
+        setState(() => _isOnPhoneCall = onCall);
+      }
+    });
 
     // 3. Initial hardware & network fetch
     VolumeLockService.getNetworkType().then((net) {
@@ -378,6 +389,30 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                 );
               }
             }
+          }
+
+          // Auto-sync live exam schedule changes (duration/start/end time) pushed by admin panel
+          final liveDuration = (data['exam_duration_minutes'] as num?)?.toInt();
+          final liveEndStr = data['exam_end_time']?.toString();
+          final liveStartStr = data['exam_start_time']?.toString();
+          final liveEnd = liveEndStr != null ? DateTime.tryParse(liveEndStr)?.toLocal() : null;
+          final liveStart = liveStartStr != null ? DateTime.tryParse(liveStartStr)?.toLocal() : null;
+          final endChanged = liveEnd != null && (_examEndTime == null || liveEnd.difference(_examEndTime!).inSeconds.abs() >= 30);
+          final durChanged = liveDuration != null && liveDuration != _examDurationMinutes;
+          if ((endChanged || durChanged) && mounted) {
+            setState(() {
+              if (liveStart != null) _examStartTime = liveStart;
+              if (liveEnd != null) _examEndTime = liveEnd;
+              if (liveDuration != null) _examDurationMinutes = liveDuration;
+            });
+            try { HapticFeedback.mediumImpact(); } catch (_) {}
+            AppNotification.show(
+              context,
+              title: 'Jadwal Ujian Diperbarui',
+              subtitle: 'Admin atau pengawas telah memperbarui jam waktu ujian Anda.',
+              type: NotificationType.info,
+              duration: const Duration(seconds: 6),
+            );
           }
 
           if (data['announcements'] is List) {
@@ -1085,6 +1120,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
           Positioned.fill(
             child: _buildTrackingShield(isDark),
           ),
+        // Phone Call Pause Shield: Permitted calls pause exam interaction until call ends
+        if (_isOnPhoneCall && !_isTrackingInterrupted)
+          Positioned.fill(
+            child: _buildPhoneCallShield(isDark),
+          ),
         // Floating Top Announcement Banner
         if (_activeToastAnnouncement != null)
           Positioned(
@@ -1229,6 +1269,60 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhoneCallShield(bool isDark) {
+    return Container(
+      color: isDark ? Colors.black.withValues(alpha: 0.94) : const Color(0xFF0F172A).withValues(alpha: 0.92),
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.phone_in_talk_rounded,
+                    size: 40,
+                    color: Color(0xFF38BDF8),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Panggilan Telepon Aktif',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Pengerjaan soal dijeda otomatis selama panggilan suara/WhatsApp berlangsung dan status dilaporkan ke pengawas.\n\nLayar ujian akan terbuka kembali setelah panggilan selesai.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFCBD5E1),
+                    height: 1.45,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

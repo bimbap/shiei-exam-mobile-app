@@ -188,6 +188,10 @@ class _TopNotificationWidgetState extends State<_TopNotificationWidget>
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.of(context).padding.top;
+    // When running in immersive kiosk mode (topInset == 0), align below the 24px kiosk status bar (top: 26)
+    // matching ExamAnnouncementBanner's vertical position.
+    final double topPadding = topInset > 0 ? 8 : 26;
     return Positioned(
       top: 0,
       left: 0,
@@ -199,7 +203,7 @@ class _TopNotificationWidgetState extends State<_TopNotificationWidget>
           child: FadeTransition(
             opacity: _fadeAnimation,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              padding: EdgeInsets.fromLTRB(14, topPadding, 14, 0),
               child: GestureDetector(
                 onVerticalDragUpdate: (details) {
                   if (details.primaryDelta != null && details.primaryDelta! < -4) {

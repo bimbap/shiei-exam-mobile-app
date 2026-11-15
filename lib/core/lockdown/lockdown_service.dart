@@ -26,6 +26,7 @@ class LockdownService with WidgetsBindingObserver {
   bool _isOnPhoneCall = false;
   bool _isCharging = false;
   StreamSubscription<dynamic>? _screenshotSubscription;
+  void Function(bool isOnCall)? onPhoneCallChanged;
 
   static const EventChannel _screenshotEventChannel =
       EventChannel('id.shiei/lockdown_events');
@@ -48,6 +49,7 @@ class LockdownService with WidgetsBindingObserver {
     _isHandlingViolation = false;
     _isOnPhoneCall = false;
     _isCharging = false;
+    onPhoneCallChanged = null;
 
     // Keep screen awake during exam
     WakelockPlus.enable();
@@ -115,6 +117,7 @@ class LockdownService with WidgetsBindingObserver {
     }
     _isOnPhoneCall = false;
     _isCharging = false;
+    onPhoneCallChanged = null;
 
     // Stop native Kiosk mode pinning
     VolumeLockService.stopLockTask();
@@ -135,18 +138,24 @@ class LockdownService with WidgetsBindingObserver {
     _isHandlingViolation = false;
   }
 
-  /**
-   * Monitor active phone call state during exam session.
-   * Business Logic Requirement: Phone calls during exams are permitted without lockout penalty,
-   * but the active call state is automatically and immediately reported to proctors on panel & app.
-   */
-  Future<void> checkPhoneCallState() async {
-    if (!_isLockdownActive || _activeExamId == null) return;
+  Future<void> _syncPhoneCallState(bool isCall) async {
+    if (isCall == _isOnPhoneCall) return;
+    _isOnPhoneCall = isCall;
+    onPhoneCallChanged?.call(isCall);
+    debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
 
-    final isCall = await VolumeLockService.isPhoneCallActive();
-    if (isCall != _isOnPhoneCall) {
-      _isOnPhoneCall = isCall;
-      debugPrint('[LockdownService] Voice Call status changed: $isCall. Reporting to proctor live monitor.');
+    // Temporarily release LockTask pinning while a call is active so incoming WhatsApp/Dialer UI
+    // can appear above the pinned screen, then re-engage pinning once the call ends.
+    if (isCall) {
+      await VolumeLockService.stopLockTask();
+    } else {
+      final bypassActive = await TokenStorage.isAppExitBypassEnabled();
+      if (!bypassActive && _isLockdownActive) {
+        await VolumeLockService.startLockTask();
+      }
+    }
+
+    if (_activeExamId != null) {
       try {
         await _api.post(
           ApiEndpoints.phoneCallStatus,
@@ -159,6 +168,18 @@ class LockdownService with WidgetsBindingObserver {
         debugPrint('[LockdownService] Error updating phone call status: $e');
       }
     }
+  }
+
+  /**
+   * Monitor active phone call state during exam session.
+   * Business Logic Requirement: Phone calls during exams are permitted without lockout penalty,
+   * but the active call state is automatically and immediately reported to proctors on panel & app.
+   */
+  Future<void> checkPhoneCallState() async {
+    if (!_isLockdownActive || _activeExamId == null) return;
+
+    final isCall = await VolumeLockService.isPhoneCallActive();
+    await _syncPhoneCallState(isCall);
   }
 
   /**
@@ -191,22 +212,16 @@ class LockdownService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (!_isLockdownActive || _activeExamId == null || _isHandlingViolation) return;
 
+    if (state == AppLifecycleState.resumed) {
+      await checkPhoneCallState();
+      return;
+    }
+
     // Check if app changed state due to an incoming or active phone call (WhatsApp, Discord, Cellular)
     // Business Requirement: Phone call during exam does NOT lock the exam, but auto-reports to panel & app!
     final bool isPhoneCall = await VolumeLockService.isPhoneCallActive();
     if (isPhoneCall) {
-      if (!_isOnPhoneCall) {
-        _isOnPhoneCall = true;
-        try {
-          await _api.post(
-            ApiEndpoints.phoneCallStatus,
-            data: {
-              'link_id': _activeExamId,
-              'is_on_call': true,
-            },
-          );
-        } catch (_) {}
-      }
+      await _syncPhoneCallState(true);
       debugPrint('[LockdownService] Voice call active during lifecycle change. Bypassing lockout ejection.');
       return; // Do NOT trigger app_minimize or overlay_detected
     }
@@ -219,18 +234,7 @@ class LockdownService with WidgetsBindingObserver {
 
       final isPhoneCallOnPause = await VolumeLockService.isPhoneCallActive();
       if (isPhoneCallOnPause) {
-        if (!_isOnPhoneCall) {
-          _isOnPhoneCall = true;
-          try {
-            await _api.post(
-              ApiEndpoints.phoneCallStatus,
-              data: {
-                'link_id': _activeExamId,
-                'is_on_call': true,
-              },
-            );
-          } catch (_) {}
-        }
+        await _syncPhoneCallState(true);
         debugPrint('[LockdownService] Voice call active on pause. Bypassing app_minimize.');
         return; // Do NOT trigger app_minimize
       }
@@ -256,18 +260,7 @@ class LockdownService with WidgetsBindingObserver {
       // Check if focus loss was triggered by an incoming phone call / VoIP call heads-up banner
       final isCallNow = await VolumeLockService.isPhoneCallActive();
       if (isCallNow) {
-        if (!_isOnPhoneCall) {
-          _isOnPhoneCall = true;
-          try {
-            await _api.post(
-              ApiEndpoints.phoneCallStatus,
-              data: {
-                'link_id': _activeExamId,
-                'is_on_call': true,
-              },
-            );
-          } catch (_) {}
-        }
+        await _syncPhoneCallState(true);
         debugPrint('[LockdownService] Voice call banner active during inactive state. Bypassing overlay.');
         return; // Do NOT trigger overlay_detected
       }

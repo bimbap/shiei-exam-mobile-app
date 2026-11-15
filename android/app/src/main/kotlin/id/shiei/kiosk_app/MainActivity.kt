@@ -1139,12 +1139,23 @@ class MainActivity : FlutterActivity() {
 
     private fun getScreenBrightness(): Int {
         return try {
-            val brightness = Settings.System.getInt(
+            val sysRes = android.content.res.Resources.getSystem()
+            val maxId = sysRes.getIdentifier("config_screenBrightnessSettingMaximum", "integer", "android")
+            val minId = sysRes.getIdentifier("config_screenBrightnessSettingMinimum", "integer", "android")
+            val maxBrightness = if (maxId != 0) sysRes.getInteger(maxId).coerceAtLeast(255) else 255
+            val minBrightness = if (minId != 0) sysRes.getInteger(minId).coerceAtLeast(0) else 0
+
+            val raw = Settings.System.getInt(
                 contentResolver,
                 Settings.System.SCREEN_BRIGHTNESS,
-                128
+                maxBrightness / 2
             )
-            (brightness * 100) / 255
+
+            // Android 10+ sliders use a perceptual gamma curve while SCREEN_BRIGHTNESS stores linear values.
+            val range = (maxBrightness - minBrightness).coerceAtLeast(1)
+            val linearNormalized = ((raw - minBrightness).toDouble() / range).coerceIn(0.0, 1.0)
+            val perceptual = Math.pow(linearNormalized, 1.0 / 2.2)
+            (perceptual * 100.0).toInt().coerceIn(0, 100)
         } catch (e: Exception) {
             50
         }

@@ -409,6 +409,10 @@ class AppUpdateService {
   /// True when update policy requires blocking lobby access until updated.
   bool isForceUpdateRequired(AppUpdateInfo info) {
     final belowMinSupported = compareVersions(currentAppVersion, info.minSupportedVersion) < 0;
+    // Allow builds that are newer than or equal to the official release (e.g. during release testing).
+    if (!belowMinSupported && compareVersions(currentAppVersion, info.latestVersion) > 0) {
+      return false;
+    }
     return info.forceUpdate || belowMinSupported || (info.hasUpdate && info.isMandatory);
   }
 
