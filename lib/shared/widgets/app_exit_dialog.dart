@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/lockdown/alarm_player_service.dart';
 import '../theme/app_theme.dart';
 
 /// Modern confirmation dialog when user attempts to exit the application.
@@ -33,6 +34,7 @@ class AppExitDialog extends StatelessWidget {
       _isShowing = false;
 
       if (result == true) {
+        await AlarmPlayerService.stopSiren();
         try {
           await _channel.invokeMethod('exitApp');
         } catch (_) {}

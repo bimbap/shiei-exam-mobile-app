@@ -23,7 +23,7 @@ class LockedScreen extends StatefulWidget {
   State<LockedScreen> createState() => _LockedScreenState();
 }
 
-class _LockedScreenState extends State<LockedScreen> {
+class _LockedScreenState extends State<LockedScreen> with WidgetsBindingObserver {
   final ApiClient _api = ApiClient();
   bool _isChecking = false;
   bool _isAlarmMuted = false;
@@ -44,6 +44,7 @@ class _LockedScreenState extends State<LockedScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final rawId = widget.arguments?['exam_id'];
     _examId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
     _loadStudentData();
@@ -105,7 +106,20 @@ class _LockedScreenState extends State<LockedScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      AlarmPlayerService.stopSiren();
+      if (mounted && !_isAlarmMuted) {
+        setState(() => _isAlarmMuted = true);
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoPollTimer?.cancel();
     AppNotification.hide();
     AlarmPlayerService.stopSiren();

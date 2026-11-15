@@ -434,6 +434,9 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "exitApp" -> {
+                    isVolumeLockActive = false
+                    unregisterVolumeObserver()
+                    restorePreExamVolumes(true)
                     finishAffinity()
                     android.os.Process.killProcess(android.os.Process.myPid())
                     System.exit(0)
