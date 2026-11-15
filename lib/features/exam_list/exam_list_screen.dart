@@ -2496,41 +2496,33 @@ class _ExamListScreenState extends State<ExamListScreen> {
                             key: const ValueKey('tab_warning'),
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (unlockersSummary != null || (effectiveLocked && lockReason != null && lockReason.isNotEmpty))
+                              if (effectiveLocked && lockReason != null && lockReason.isNotEmpty)
                                 Container(
                                   width: double.infinity,
                                   margin: const EdgeInsets.only(bottom: 10),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                   decoration: BoxDecoration(
-                                    color: effectiveLocked
-                                        ? (isDark ? const Color(0xFF2A0A0A) : const Color(0xFFFEF2F2))
-                                        : (isDark ? const Color(0xFF06281D) : const Color(0xFFECFDF5)),
+                                    color: isDark ? const Color(0xFF2A0A0A) : const Color(0xFFFEF2F2),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                      color: effectiveLocked
-                                          ? AppTheme.dangerRed.withOpacity(0.35)
-                                          : const Color(0xFF10B981).withOpacity(0.35),
+                                      color: AppTheme.dangerRed.withOpacity(0.35),
                                     ),
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(
-                                        effectiveLocked ? Icons.lock_outline_rounded : Icons.lock_open_rounded,
+                                      const Icon(
+                                        Icons.lock_outline_rounded,
                                         size: 16,
-                                        color: effectiveLocked ? AppTheme.dangerRed : const Color(0xFF059669),
+                                        color: AppTheme.dangerRed,
                                       ),
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          effectiveLocked
-                                              ? 'Status Terkunci: ${lockReason ?? 'Pelanggaran terdeteksi'}'
-                                              : 'Pembuka Sesi: $unlockersSummary',
-                                          style: TextStyle(
+                                          'Status Terkunci: $lockReason',
+                                          style: const TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w600,
-                                            color: effectiveLocked
-                                                ? AppTheme.dangerRed
-                                                : (isDark ? const Color(0xFF34D399) : const Color(0xFF047857)),
+                                            color: AppTheme.dangerRed,
                                           ),
                                         ),
                                       ),
@@ -2539,104 +2531,130 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                 ),
                               if (violationLogs.isNotEmpty)
                                 ConstrainedBox(
-                                  constraints: const BoxConstraints(maxHeight: 240),
-                                  child: ListView.separated(
-                                    shrinkWrap: true,
-                                    itemCount: violationLogs.length,
-                                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                                    itemBuilder: (_, idx) {
-                                      final rawLog = violationLogs[idx];
-                                      final log = rawLog is Map ? Map<String, dynamic>.from(rawLog) : <String, dynamic>{};
-                                      final eventType = log['event_type']?.toString();
-                                      final eventLabel = formatViolationLabel(eventType);
-                                      final details = log['details']?.toString();
-                                      final occurredAt = formatDate(log['occurred_at']);
-                                      final logUnlocker = log['unlocked_by_name']?.toString();
-                                      final logUnlockedAt = log['unlocked_at'] != null ? formatDate(log['unlocked_at']) : null;
+                                  constraints: BoxConstraints(
+                                    maxHeight: (MediaQuery.of(ctx).size.height * 0.44).clamp(240.0, 420.0),
+                                  ),
+                                  child: Scrollbar(
+                                    thumbVisibility: violationLogs.length > 2,
+                                    radius: const Radius.circular(8),
+                                    child: ListView.separated(
+                                      shrinkWrap: true,
+                                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                                      padding: EdgeInsets.only(right: violationLogs.length > 2 ? 6 : 0),
+                                      itemCount: violationLogs.length,
+                                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                                      itemBuilder: (_, idx) {
+                                        final rawLog = violationLogs[idx];
+                                        final log = rawLog is Map ? Map<String, dynamic>.from(rawLog) : <String, dynamic>{};
+                                        final eventType = log['event_type']?.toString();
+                                        final eventLabel = formatViolationLabel(eventType);
+                                        final details = log['details']?.toString();
+                                        final occurredAt = formatDate(log['occurred_at']);
+                                        final rawLogUnlocker = log['unlocked_by_name']?.toString();
+                                        final logUnlocker = (rawLogUnlocker != null && rawLogUnlocker.isNotEmpty)
+                                            ? rawLogUnlocker
+                                            : ((!effectiveLocked && violationLogs.length == 1 && unlockedByName != null && unlockedByName.isNotEmpty)
+                                                ? unlockedByName
+                                                : null);
+                                        final logUnlockedAt = log['unlocked_at'] != null ? formatDate(log['unlocked_at']) : null;
 
-                                      return Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: isDark ? AppTheme.surfaceDark : const Color(0xFFF8FAFC),
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Container(
-                                              width: 34,
-                                              height: 34,
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.dangerRed.withOpacity(0.12),
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                              child: Icon(
-                                                formatViolationIcon(eventType),
-                                                size: 18,
-                                                color: AppTheme.dangerRed,
-                                              ),
+                                        return Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: isDark ? AppTheme.surfaceDark : const Color(0xFFF8FAFC),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                                             ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    eventLabel,
-                                                    style: TextStyle(
-                                                      fontSize: 12.5,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: isDark ? Colors.white : AppTheme.textPrimaryLight,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    occurredAt,
-                                                    style: TextStyle(
-                                                      fontSize: 10.5,
-                                                      fontWeight: FontWeight.w500,
-                                                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                                    ),
-                                                  ),
-                                                  if (details != null && details.isNotEmpty) ...[
-                                                    const SizedBox(height: 5),
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Container(
+                                                width: 34,
+                                                height: 34,
+                                                decoration: BoxDecoration(
+                                                  color: AppTheme.dangerRed.withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(
+                                                  formatViolationIcon(eventType),
+                                                  size: 18,
+                                                  color: AppTheme.dangerRed,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
                                                     Text(
-                                                      details,
+                                                      eventLabel,
                                                       style: TextStyle(
-                                                        fontSize: 11.5,
-                                                        height: 1.35,
-                                                        color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
+                                                        fontSize: 12.5,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isDark ? Colors.white : AppTheme.textPrimaryLight,
                                                       ),
                                                     ),
-                                                  ],
-                                                  if (logUnlocker != null && logUnlocker.isNotEmpty) ...[
-                                                    const SizedBox(height: 6),
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(0xFF10B981).withOpacity(0.12),
-                                                        borderRadius: BorderRadius.circular(6),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      occurredAt,
+                                                      style: TextStyle(
+                                                        fontSize: 10.5,
+                                                        fontWeight: FontWeight.w500,
+                                                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                                       ),
-                                                      child: Text(
-                                                        'Dibuka: $logUnlocker${logUnlockedAt != null ? ' • $logUnlockedAt' : ''}',
+                                                    ),
+                                                    if (details != null && details.isNotEmpty) ...[
+                                                      const SizedBox(height: 5),
+                                                      Text(
+                                                        details,
                                                         style: TextStyle(
-                                                          fontSize: 10.5,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                                                          fontSize: 11.5,
+                                                          height: 1.35,
+                                                          color: isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight,
                                                         ),
                                                       ),
-                                                    ),
+                                                    ],
+                                                    if (logUnlocker != null && logUnlocker.isNotEmpty) ...[
+                                                      const SizedBox(height: 6),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFF10B981).withOpacity(0.12),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              Icons.lock_open_rounded,
+                                                              size: 12,
+                                                              color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                                                            ),
+                                                            const SizedBox(width: 5),
+                                                            Flexible(
+                                                              child: Text(
+                                                                'Dibuka oleh: $logUnlocker${logUnlockedAt != null ? ' • $logUnlockedAt' : ''}',
+                                                                style: TextStyle(
+                                                                  fontSize: 10.5,
+                                                                  fontWeight: FontWeight.w600,
+                                                                  color: isDark ? const Color(0xFF34D399) : const Color(0xFF047857),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ],
-                                                ],
+                                                ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                             ],
