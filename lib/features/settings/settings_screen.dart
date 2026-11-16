@@ -16,6 +16,7 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_notification.dart';
 import '../exam_player/url_exam_player.dart';
 import 'legal_document_screen.dart';
+import 'widgets/browser_account_picker_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -44,7 +45,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showFullLicenseKey = false;
 
   // Browser Login Connection State
-  bool _keepBrowserLogin = true;
+  bool _keepBrowserLogin = false;
   bool _browserLoginConnected = false;
   bool _isChoosingBrowserMode = false;
   String? _browserLoginLabel;
@@ -384,7 +385,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) async {
     String? pickedEmail;
     if (customUrl == null && Platform.isAndroid) {
-      pickedEmail = await VolumeLockService.pickDeviceGoogleAccount();
+      pickedEmail = await BrowserAccountPickerSheet.pick(
+        context,
+        currentEmail: _browserLoginEmail,
+      );
       if (pickedEmail == null || pickedEmail.isEmpty) {
         return;
       }
@@ -604,10 +608,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     Widget child;
     if (showConnectedView) {
-      final accountDisplay = _browserLoginEmail?.isNotEmpty == true
-          ? _browserLoginEmail!
-          : (_browserLoginLabel ?? 'Akun Browser Terhubung');
-      final avatarInitial = accountDisplay.substring(0, 1).toUpperCase();
+      final rawDisplay = _browserLoginEmail?.isNotEmpty == true
+          ? _browserLoginEmail!.trim()
+          : (_browserLoginLabel?.trim().isNotEmpty == true
+              ? _browserLoginLabel!.trim()
+              : 'Akun Browser Terhubung');
+      final avatarInitial =
+          rawDisplay.isNotEmpty ? rawDisplay.substring(0, 1).toUpperCase() : 'A';
+      final accountDisplay = rawDisplay;
 
       child = Column(
         key: const ValueKey('browser_connected'),
@@ -654,25 +662,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentGreen.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: AppTheme.accentGreen.withValues(alpha: 0.35),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
                             ),
-                          ),
-                          child: Text(
-                            'TERHUBUNG • ${_browserLoginLabel ?? 'Sesi Aktif'}',
-                            style: const TextStyle(
-                              fontSize: 9.8,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.accentGreen,
-                              letterSpacing: 0.3,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentGreen.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: AppTheme.accentGreen.withValues(alpha: 0.35),
+                              ),
+                            ),
+                            child: Text(
+                              'TERHUBUNG • ${_browserLoginLabel ?? 'Sesi Aktif'}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 9.8,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.accentGreen,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ),
@@ -693,7 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               border: Border.all(color: cardBorder),
             ),
             child: Text(
-              'Sesi login tersimpan aman hanya di peramban ujian (tanpa history Chrome/Safari HP). Putuskan koneksi jika ingin mengganti mode ke Guest.',
+              'Sesi login tersimpan aman hanya di peramban ujian. Putuskan koneksi jika ingin mengganti mode ke Guest.',
               style: TextStyle(fontSize: 11, color: textColor, height: 1.38),
             ),
           ),
@@ -715,7 +727,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     size: 18,
                   ),
                   label: Text(
-                    isAndroid ? 'Ganti Akun Google' : 'Kelola Akun Web',
+                    isAndroid ? 'Ganti Akun' : 'Kelola Akun',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.bold,
@@ -859,184 +873,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
         key: const ValueKey('browser_picker'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Pilih bagaimana browser ujian bekerja saat membuka soal (keduanya aman dan tidak meninggalkan history di Chrome/Safari HP):',
-            style: TextStyle(fontSize: 11.8, color: textColor, height: 1.4),
-          ),
-          const SizedBox(height: 12),
-          // Option 1: Connected Account
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryShiei.withValues(alpha: isDark ? 0.10 : 0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: AppTheme.primaryShiei.withValues(alpha: 0.35),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  'Pilih cara akses peramban saat membuka lembar soal:',
+                  style: TextStyle(fontSize: 11.8, color: textColor, height: 1.4),
+                ),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(7),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryShiei.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Icon(
-                        isAndroid
-                            ? Icons.account_circle_rounded
-                            : Icons.verified_user_rounded,
-                        color: AppTheme.primaryGlow,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hubungkan Akun (Google / CBT)',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: titleColor,
-                            ),
-                          ),
-                          Text(
-                            'Login sekali sebelum ujian agar langsung siap masuk soal',
-                            style: TextStyle(fontSize: 11, color: textColor),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 40),
-                    backgroundColor: AppTheme.primaryShiei,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                    ),
+              if (!_keepBrowserLogin && _isChoosingBrowserMode) ...[
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => setState(() => _isChoosingBrowserMode = false),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   ),
-                  icon: Icon(
-                    isAndroid ? Icons.account_circle_outlined : Icons.login_rounded,
-                    size: 17,
-                  ),
-                  label: Text(
-                    isAndroid
-                        ? 'Pilih & Hubungkan Akun Google'
-                        : 'Hubungkan Akun Browser',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () => _openBrowserLoginConnect(),
-                ),
-                const SizedBox(height: 2),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _openCustomPortalDialog,
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                    ),
-                    child: const Text(
-                      'Atau login ke portal CBT sekolah (URL kustom)',
-                      style: TextStyle(
-                        fontSize: 10.8,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.primaryGlow,
-                      ),
-                    ),
+                  child: const Text(
+                    'Batal',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
-            ),
+            ],
           ),
           const SizedBox(height: 10),
-          // Option 2: Guest Mode (Incognito)
-          InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => _toggleKeepBrowserLogin(false),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppTheme.accentGreen.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentGreen.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: const Icon(
-                      Icons.privacy_tip_outlined,
-                      color: AppTheme.accentGreen,
-                      size: 18,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Gunakan Mode Guest (Incognito)',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: titleColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Tanpa akun tersimpan. Nol history, nol cache form & cookie terhapus tiap sesi.',
-                          style: TextStyle(fontSize: 11, color: textColor),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 14,
-                    color: AppTheme.accentGreen,
-                  ),
-                ],
-              ),
-            ),
+          Divider(color: dividerColor, height: 1),
+          _buildBrowserModeRow(
+            icon: isAndroid
+                ? Icons.account_circle_rounded
+                : Icons.verified_user_rounded,
+            iconColor: AppTheme.primaryGlow,
+            title: isAndroid ? 'Hubungkan Akun Google' : 'Hubungkan Akun Web',
+            subtitle: 'Simpan sesi agar langsung siap membuka soal Google Form',
+            badgeText: 'Rekomendasi',
+            titleColor: titleColor,
+            textColor: textColor,
+            onTap: () => _openBrowserLoginConnect(),
           ),
-          if (!_keepBrowserLogin && _isChoosingBrowserMode) ...[
-            const SizedBox(height: 6),
-            Align(
-              alignment: Alignment.center,
-              child: TextButton(
-                onPressed: () => setState(() => _isChoosingBrowserMode = false),
-                child: const Text(
-                  'Batal & Tetap Pakai Mode Guest',
-                  style: TextStyle(fontSize: 11.5),
-                ),
-              ),
-            ),
-          ],
+          Divider(color: dividerColor, height: 1),
+          _buildBrowserModeRow(
+            icon: Icons.language_rounded,
+            iconColor: const Color(0xFF0EA5E9),
+            title: 'Portal CBT Sekolah (URL Kustom)',
+            subtitle: 'Login ke web CBT mandiri / Moodle (non-Google)',
+            titleColor: titleColor,
+            textColor: textColor,
+            onTap: _openCustomPortalDialog,
+          ),
+          Divider(color: dividerColor, height: 1),
+          _buildBrowserModeRow(
+            icon: Icons.privacy_tip_outlined,
+            iconColor: AppTheme.accentGreen,
+            title: 'Mode Guest (Incognito)',
+            subtitle: 'Tanpa akun tersimpan · cookie & cache otomatis bersih',
+            titleColor: titleColor,
+            textColor: textColor,
+            onTap: () => _toggleKeepBrowserLogin(false),
+          ),
         ],
       );
     }
@@ -1053,6 +948,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         child: child,
+      ),
+    );
+  }
+
+  Widget _buildBrowserModeRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    String? badgeText,
+    required Color titleColor,
+    required Color textColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 2),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: titleColor,
+                          ),
+                        ),
+                      ),
+                      if (badgeText != null) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryShiei.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.primaryGlow,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 11, color: textColor, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Icon(Icons.chevron_right_rounded, color: textColor.withValues(alpha: 0.7), size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -1176,13 +1152,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   'Anti-Screenshot Lembar Ujian',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: titleColor),
                                 ),
-                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
@@ -1236,13 +1214,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   'Bypass Keluar Aplikasi (Testing)',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: titleColor),
                                 ),
-                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
@@ -1296,13 +1276,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Text(
                                   'Bypass Suara Alarm (Anti-Berisik)',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: titleColor),
                                 ),
-                                const SizedBox(width: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
@@ -1540,42 +1522,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              'Versi ${AppUpdateService.displayAppVersion} (Build ${AppUpdateService.displayBuildNumber})',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: titleColor),
-                            ),
-                            if (AppUpdateService.isDebugBuild) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
-                                ),
-                                child: const Text(
-                                  'DEBUG',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFFF59E0B),
-                                    letterSpacing: 0.5,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Versi ${AppUpdateService.displayAppVersion} (Build ${AppUpdateService.displayBuildNumber})',
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: titleColor),
+                              ),
+                              if (AppUpdateService.isDebugBuild)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5)),
+                                  ),
+                                  child: const Text(
+                                    'DEBUG',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFFF59E0B),
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
                                 ),
-                              ),
                             ],
-                          ],
-                        ),
-                        const Text(
-                          'Menjaga Integritas, Mengawal Kejujuran Ujian',
-                          style: TextStyle(fontSize: 10.5, color: AppTheme.primaryGlow),
-                        ),
-                      ],
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Menjaga Integritas, Mengawal Kejujuran Ujian',
+                            style: TextStyle(fontSize: 10.5, color: AppTheme.primaryGlow),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -1871,13 +1857,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Icon(icon, size: 14, color: AppTheme.primaryGlow),
           const SizedBox(width: 6),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.primaryGlow,
-              letterSpacing: 0.8,
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryGlow,
+                letterSpacing: 0.8,
+              ),
             ),
           ),
         ],
@@ -1888,17 +1878,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildInfoRow(String label, String value, {Color? valueColor, bool isDark = true}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: isDark ? AppTheme.textSecondary : const Color(0xFF475569)),
+        Flexible(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 12, color: isDark ? AppTheme.textSecondary : const Color(0xFF475569)),
+          ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: valueColor ?? (isDark ? Colors.white : const Color(0xFF0F172A)),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: valueColor ?? (isDark ? Colors.white : const Color(0xFF0F172A)),
+            ),
           ),
         ),
       ],
@@ -2098,20 +2095,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
               ),
             ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryGlow,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Flexible(
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryGlow,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(icon, size: 13, color: AppTheme.primaryGlow),
-              ],
+                  const SizedBox(width: 4),
+                  Icon(icon, size: 13, color: AppTheme.primaryGlow),
+                ],
+              ),
             ),
           ],
         ),

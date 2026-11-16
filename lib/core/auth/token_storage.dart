@@ -249,7 +249,7 @@ class TokenStorage {
 
   static Future<bool> isKeepBrowserLoginEnabled() async {
     final val = await _storage.read(key: _keyKeepBrowserLogin);
-    return val != '0'; // default true so connected browser accounts persist
+    return val == '1'; // default false (Incognito / Guest mode)
   }
 
   static Future<void> saveBrowserLoginMeta({

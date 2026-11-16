@@ -1,6 +1,10 @@
 package id.shiei.kiosk_app
 
+import android.Manifest
 import android.accounts.AccountManager
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlarmManager
@@ -86,6 +90,8 @@ class MainActivity : FlutterActivity() {
     private var lastVolumeDownTime = 0L
     private var pendingAccountResult: MethodChannel.Result? = null
     private val reqPickGoogleAccount = 4102
+    private var pendingAccountsListResult: MethodChannel.Result? = null
+    private val reqGetAccountsPermission = 4103
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -789,6 +795,29 @@ class MainActivity : FlutterActivity() {
                 "wasRecentScreenshotKey" -> {
                     val isRecent = (System.currentTimeMillis() - lastVolumeDownTime) < 1500L
                     result.success(isRecent)
+                }
+
+                "clearClipboard" -> {
+                    clearClipboardSilently()
+                    result.success(true)
+                }
+
+                "getDeviceGoogleAccounts" -> {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.GET_ACCOUNTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasPermission) {
+                        result.success(fetchDeviceGoogleAccountEmails())
+                    } else {
+                        pendingAccountsListResult?.success(null)
+                        pendingAccountsListResult = result
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.GET_ACCOUNTS),
+                            reqGetAccountsPermission
+                        )
+                    }
                 }
 
                 "pickDeviceGoogleAccount" -> {
@@ -2005,6 +2034,52 @@ class MainActivity : FlutterActivity() {
             "signatureHash" to sigHash,
             "isDebug" to isDebug
         )
+    }
+
+    private fun clearClipboardSilently() {
+        runOnUiThread {
+            try {
+                val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                if (cm != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        cm.clearPrimaryClip()
+                    } else {
+                        @Suppress("DEPRECATION")
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun fetchDeviceGoogleAccountEmails(): List<String> {
+        return try {
+            AccountManager.get(this)
+                .getAccountsByType("com.google")
+                .mapNotNull { it.name?.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == reqGetAccountsPermission) {
+            val pending = pendingAccountsListResult
+            pendingAccountsListResult = null
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            if (granted) {
+                pending?.success(fetchDeviceGoogleAccountEmails())
+            } else {
+                pending?.success(null)
+            }
+        }
     }
 
     @Suppress("DEPRECATION")

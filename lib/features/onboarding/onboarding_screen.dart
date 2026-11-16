@@ -2,12 +2,12 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../config/routes.dart';
 import '../../core/auth/token_storage.dart';
-import '../../core/lockdown/volume_lock_service.dart';
 import '../../core/notifications/exam_reminder_service.dart';
 import '../../core/theme/theme_controller.dart';
 import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../exam_player/url_exam_player.dart';
+import '../settings/widgets/browser_account_picker_sheet.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -22,7 +22,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   bool _isNotificationGranted = false;
   bool _canInstallPackages = false;
-  bool _keepBrowserLogin = true;
+  bool _keepBrowserLogin = false;
   bool _browserLoginConnected = false;
   String? _browserLoginEmail;
 
@@ -63,7 +63,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   Future<void> _connectGoogleDuringOnboarding() async {
     String? pickedEmail;
     if (Platform.isAndroid) {
-      pickedEmail = await VolumeLockService.pickDeviceGoogleAccount();
+      pickedEmail = await BrowserAccountPickerSheet.pick(
+        context,
+        currentEmail: _browserLoginEmail,
+      );
       if (pickedEmail == null || pickedEmail.isEmpty) return;
       if (_browserLoginEmail != null &&
           _browserLoginEmail!.toLowerCase() != pickedEmail.toLowerCase()) {
@@ -293,17 +296,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          isLast
-                              ? 'Saya Setuju & Siap Ujian'
-                              : (!_canProceed ? 'Aktifkan Izin untuk Lanjut' : 'Lanjutkan'),
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.3,
-                            color: _canProceed
-                                ? Colors.white
-                                : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                        Flexible(
+                          child: Text(
+                            isLast
+                                ? 'Saya Setuju & Siap Ujian'
+                                : (!_canProceed ? 'Aktifkan Izin untuk Lanjut' : 'Lanjutkan'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.3,
+                              color: _canProceed
+                                  ? Colors.white
+                                  : (isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -620,7 +627,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Aktifkan Izin Notifikasi',
       description:
           'Dapatkan ralat soal seketika dari pengawas saat ujian berlangsung, serta pengingat jadwal ujian H-1 dan 30 menit sebelum mulai.',
-      imageAsset: 'assets/images/shiei_mascot_notif.jpg',
+      imageAsset: 'assets/images/shiei_mascot_notif_female.jpg',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
         child: _isNotificationGranted
@@ -674,7 +681,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Izinkan Pembaruan Otomatis',
       description:
           'Agar Shiei Exam selalu mendapatkan pembaruan sistem dan keamanan terbaru dari sekolah secara instan tanpa perlu download manual dari browser.',
-      imageAsset: 'assets/images/shiei_mascot_update.jpg',
+      imageAsset: 'assets/images/shiei_mascot_student_female.jpg',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
         child: _canInstallPackages
@@ -737,8 +744,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 96,
-                  height: 96,
+                  width: 112,
+                  height: 112,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
@@ -754,13 +761,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                     ),
                     border: Border.all(
                       color: AppTheme.primaryShiei.withValues(alpha: 0.35),
-                      width: 2,
+                      width: 2.2,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDark
+                            ? AppTheme.primaryShiei.withValues(alpha: 0.25)
+                            : const Color(0x180F172A),
+                        blurRadius: 24,
+                        spreadRadius: 2,
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.public_rounded,
-                    size: 44,
-                    color: AppTheme.primaryGlow,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/shiei_mascot_browser_glasses.jpg',
+                      fit: BoxFit.cover,
+                      cacheWidth: 360,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.public_rounded,
+                        size: 46,
+                        color: AppTheme.primaryGlow,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -807,10 +830,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                 ),
                 const SizedBox(height: 18),
                 _buildBrowserModeCard(
-                  title: 'Connected Account (WebView)',
+                  title: 'Mode Guest (Incognito)',
+                  subtitle: 'Mode penyamaran penuh',
+                  icon: Icons.security_rounded,
+                  iconColor: const Color(0xFF10B981),
+                  isSelected: !_keepBrowserLogin,
+                  isDark: isDark,
+                  onTap: () => _setBrowserMode(false),
+                ),
+                const SizedBox(height: 10),
+                _buildBrowserModeCard(
+                  title: 'Connected Account',
                   subtitle: _browserLoginConnected
-                      ? 'Terhubung: ${_browserLoginEmail ?? 'Akun Web'}'
-                      : 'Simpan login Google / portal CBT agar siap dipakai saat ujian (tanpa history Chrome/Safari)',
+                      ? 'Terhubung: ${_browserLoginEmail ?? 'Akun Aktif'}'
+                      : 'Simpan login Google / portal CBT agar siap dipakai saat ujian',
                   icon: Icons.verified_user_rounded,
                   iconColor: AppTheme.primaryGlow,
                   isSelected: _keepBrowserLogin,
@@ -830,16 +863,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                           ),
                         )
                       : null,
-                ),
-                const SizedBox(height: 10),
-                _buildBrowserModeCard(
-                  title: 'Guest WebView (Incognito)',
-                  subtitle: 'Mode penyamaran penuh: tanpa akun, tanpa history, dan cookie otomatis terhapus tiap ujian',
-                  icon: Icons.security_rounded,
-                  iconColor: const Color(0xFF10B981),
-                  isSelected: !_keepBrowserLogin,
-                  isDark: isDark,
-                  onTap: () => _setBrowserMode(false),
                 ),
               ],
             ),
@@ -972,7 +995,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Image.asset(
-                  'assets/images/shiei_trio_banner.jpg',
+                  'assets/images/shiei_quad_banner.jpg',
                   fit: BoxFit.cover,
                   cacheWidth: 800,
                 ),

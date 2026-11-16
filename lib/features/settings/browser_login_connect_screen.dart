@@ -167,9 +167,9 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
             lower.contains('moodle');
       });
 
-      final detected = _isGoogleFlow
-          ? (hasGoogleAuth && (landedOnGoogleService || !stillOnGoogleSignIn))
-          : hasSiteAuth;
+      final detected = _isGoogleFlow &&
+          hasGoogleAuth &&
+          (landedOnGoogleService || !stillOnGoogleSignIn);
 
       if (mounted) {
         setState(() => _hasAuthCookie = _isGoogleFlow ? hasGoogleAuth : hasSiteAuth);

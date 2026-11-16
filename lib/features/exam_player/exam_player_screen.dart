@@ -145,7 +145,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     VolumeLockService.lockOrientationPortrait(true);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    Clipboard.setData(const ClipboardData(text: ''));
+    VolumeLockService.clearClipboard();
 
     // Enforce native anti-screenshot protection strictly during active exam
     // In release mode: permanently enforced. In debug mode: follow setting toggle.

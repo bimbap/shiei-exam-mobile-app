@@ -129,7 +129,11 @@ import UserNotifications
       case "wasRecentScreenshotKey":
         result(false)
 
-      case "pickDeviceGoogleAccount":
+      case "clearClipboard":
+        UIPasteboard.general.items = []
+        result(true)
+
+      case "getDeviceGoogleAccounts", "pickDeviceGoogleAccount":
         // iOS does not expose OS accounts without paid Sign in with Apple entitlement; fall back to clean web auth sheet.
         result(nil)
 

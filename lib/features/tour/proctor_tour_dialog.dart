@@ -596,7 +596,7 @@ class _ProctorTourDialogState extends State<ProctorTourDialog> with TickerProvid
                           child: AspectRatio(
                             aspectRatio: 16 / 9,
                             child: Image.asset(
-                              'assets/images/shiei_trio_banner.jpg',
+                              'assets/images/shiei_quad_banner.jpg',
                               fit: BoxFit.cover,
                               cacheWidth: 720,
                               errorBuilder: (_, __, ___) => Container(

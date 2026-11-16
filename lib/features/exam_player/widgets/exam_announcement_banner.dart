@@ -176,67 +176,68 @@ class _ExamAnnouncementBannerState extends State<ExamAnnouncementBanner>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header: Tag + Proctor Name + Dismiss 'X'
+                        // Line 1: Badges at top + Dismiss 'X'
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: accentColor.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: accentColor.withValues(alpha: 0.4)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            Expanded(
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 5,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Icon(icon, size: 14, color: accentColor),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    badgeText,
-                                    style: TextStyle(
-                                      color: accentColor,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(alpha: 0.18),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: accentColor.withValues(alpha: 0.45)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(icon, size: 15, color: accentColor),
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            badgeText,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: accentColor,
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.7,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
+                                  if (isPersonalTarget)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF6366F1).withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(7),
+                                        border: Border.all(
+                                          color: const Color(0xFF6366F1).withValues(alpha: 0.45),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'KHUSUS ANDA',
+                                        style: TextStyle(
+                                          color: Color(0xFF6366F1),
+                                          fontSize: 9.8,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
-                            if (isPersonalTarget) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF6366F1).withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: const Color(0xFF6366F1).withValues(alpha: 0.45),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'KHUSUS ANDA',
-                                  style: TextStyle(
-                                    color: Color(0xFF6366F1),
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            Expanded(
-                              child: Text(
-                                proctor,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
                             InkWell(
                               onTap: () => _dismissWithAnimation(),
                               borderRadius: BorderRadius.circular(20),
@@ -244,8 +245,32 @@ class _ExamAnnouncementBannerState extends State<ExamAnnouncementBanner>
                                 padding: const EdgeInsets.all(4),
                                 child: Icon(
                                   Icons.close_rounded,
-                                  size: 18,
+                                  size: 19,
                                   color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Line 2: Sender / Proctor Name on its own responsive row
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person_outline_rounded,
+                              size: 14.5,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text(
+                                proctor,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),

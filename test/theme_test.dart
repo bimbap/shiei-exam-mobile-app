@@ -49,15 +49,17 @@ void main() {
       expect(saved, equals('system'));
     });
 
-    test('Browser session mode defaults to connected and toggles Guest Incognito cleanly', () async {
-      expect(await TokenStorage.isKeepBrowserLoginEnabled(), isTrue);
+    test('Browser session mode defaults to Guest Incognito and toggles Connected Account cleanly', () async {
+      expect(await TokenStorage.isKeepBrowserLoginEnabled(), isFalse);
 
+      await TokenStorage.setKeepBrowserLoginEnabled(true);
       await TokenStorage.saveBrowserLoginMeta(
         connected: true,
         label: 'Akun Google',
         email: 'siswa@school.sch.id',
         url: 'https://docs.google.com/forms',
       );
+      expect(await TokenStorage.isKeepBrowserLoginEnabled(), isTrue);
       final meta = await TokenStorage.getBrowserLoginMeta();
       expect(meta['connected'], isTrue);
       expect(meta['email'], equals('siswa@school.sch.id'));

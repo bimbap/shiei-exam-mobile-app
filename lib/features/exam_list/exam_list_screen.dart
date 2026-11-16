@@ -22,6 +22,7 @@ import '../../shared/widgets/shiei_skeleton.dart';
 import '../tour/app_tour_dialog.dart';
 import '../update/app_update_dialog.dart';
 import 'exam_list_controller.dart';
+import 'integrity_line_chart.dart';
 
 class ExamListScreen extends StatefulWidget {
   const ExamListScreen({super.key});
@@ -2172,7 +2173,6 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
     final bool hasWarningTab = violationsCount > 0 ||
         violationLogs.isNotEmpty ||
-        (wasUnlocked && unlockedByName != null && unlockedByName.isNotEmpty) ||
         (effectiveLocked && lockReason != null && lockReason.isNotEmpty);
     int activeDetailTab = 0;
 
@@ -2409,14 +2409,18 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                               : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
                                         ),
                                         const SizedBox(width: 6),
-                                        Text(
-                                          'Info Ujian',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: (!hasWarningTab || activeDetailTab == 0)
-                                                ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
-                                                : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                        Flexible(
+                                          child: Text(
+                                            'Info Ujian',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                              color: (!hasWarningTab || activeDetailTab == 0)
+                                                  ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
+                                                  : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -2441,14 +2445,18 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                                 : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
                                           ),
                                           const SizedBox(width: 6),
-                                          Text(
-                                            violationsCount > 0 ? 'Pelanggaran ($violationsCount)' : 'Pelanggaran',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: activeDetailTab == 1
-                                                  ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
-                                                  : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                          Flexible(
+                                            child: Text(
+                                              violationsCount > 0 ? 'Pelanggaran ($violationsCount)' : 'Pelanggaran',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: activeDetailTab == 1
+                                                    ? (effectiveLocked ? AppTheme.dangerRed : const Color(0xFFD97706))
+                                                    : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -3997,8 +4005,8 @@ class _ExamListScreenState extends State<ExamListScreen> {
         ? ((cleanCompletedCount / participatedCount) * 100).round().clamp(0, 100)
         : 0;
 
-    // Show up to 8 most recent exams in chronological left-to-right order
-    final recentItems = history.take(8).toList().reversed.toList();
+    // Show up to 12 most recent exams in chronological left-to-right order
+    final recentItems = history.take(12).toList().reversed.toList();
     final selectedIdx = (_selectedIntegrityBarIndex != null &&
             _selectedIntegrityBarIndex! >= 0 &&
             _selectedIntegrityBarIndex! < recentItems.length)
@@ -4025,7 +4033,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
       return AppTheme.primaryBlue;
     }
 
-    double resolveBarFraction(Map<String, dynamic> item) {
+    double resolveIntegrityScore(Map<String, dynamic> item) {
       final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
       final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
       final violationLogs = (item['violation_logs'] as List?) ?? const [];
@@ -4037,11 +4045,11 @@ class _ExamListScreenState extends State<ExamListScreen> {
       final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
       final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
 
-      if (isLocked) return 0.34;
-      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 1.0;
-      if (isCompleted) return (0.76 - (violationsCount * 0.08)).clamp(0.45, 0.76);
-      if (isEnded && elapsedSec <= 0) return 0.22;
-      return 0.65;
+      if (isLocked) return 22.0;
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 100.0;
+      if (isCompleted) return (78.0 - (violationsCount * 14.0)).clamp(35.0, 78.0);
+      if (isEnded && elapsedSec <= 0) return 10.0;
+      return 65.0;
     }
 
     String resolveBarStatusText(Map<String, dynamic> item) {
@@ -4062,6 +4070,24 @@ class _ExamListScreenState extends State<ExamListScreen> {
       if (isEnded && elapsedSec <= 0) return 'Tidak Dikerjakan';
       return 'Sedang Berlangsung';
     }
+
+    final chartPoints = List<IntegrityChartPoint>.generate(recentItems.length, (idx) {
+      final barItem = recentItems[idx];
+      final barLink = barItem['link'] is Map ? barItem['link'] as Map : const {};
+      final rawSubject = (barLink['subject'] ?? 'U${idx + 1}').toString().trim();
+      final shortLabel = rawSubject.length > 5
+          ? rawSubject.substring(0, 5).toUpperCase()
+          : (rawSubject.isNotEmpty ? rawSubject.toUpperCase() : 'U${idx + 1}');
+      return IntegrityChartPoint(
+        label: shortLabel,
+        title: barLink['title']?.toString() ?? 'Ujian Digital',
+        subject: rawSubject.isNotEmpty ? rawSubject : 'Umum',
+        statusText: resolveBarStatusText(barItem),
+        value: resolveIntegrityScore(barItem),
+        color: resolveBarColor(barItem),
+        rawItem: barItem,
+      );
+    });
 
     final selLink = selectedItem['link'] is Map ? selectedItem['link'] as Map : const {};
     final selTitle = selLink['title']?.toString() ?? 'Ujian Digital';
@@ -4103,7 +4129,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Ketuk batang grafik untuk cek detail ujian',
+                      'Geser atau ketuk titik grafik untuk cek detail ujian',
                       style: TextStyle(fontSize: 11, color: subColor),
                     ),
                   ],
@@ -4143,7 +4169,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
             children: [
               Expanded(
                 child: _buildStatMiniTile(
-                  label: 'Tertib (0 Alert)',
+                  label: 'Ujian Tertib',
                   value: '$cleanCompletedCount / $participatedCount',
                   color: AppTheme.accentGreen,
                   innerBg: innerBg,
@@ -4177,137 +4203,61 @@ class _ExamListScreenState extends State<ExamListScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Interactive Vertical Bar Chart (last 8 exams)
-          Container(
-            padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
-            decoration: BoxDecoration(
-              color: innerBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cardBorder),
-            ),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 92,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: List.generate(recentItems.length, (idx) {
-                      final barItem = recentItems[idx];
-                      final barColor = resolveBarColor(barItem);
-                      final frac = resolveBarFraction(barItem);
-                      final isSelected = idx == selectedIdx;
-                      final rawSubject = (barItem['link']?['subject'] ?? 'U${idx + 1}').toString();
-                      final shortLabel = rawSubject.length > 4
-                          ? rawSubject.substring(0, 4).toUpperCase()
-                          : rawSubject.toUpperCase();
+          // Interactive Trading-Style Area Line Chart
+          IntegrityLineChart(
+            points: chartPoints,
+            selectedIndex: selectedIdx,
+            isDark: isDark,
+            onSelectIndex: (idx) => setState(() => _selectedIntegrityBarIndex = idx),
+          ),
+          const SizedBox(height: 10),
 
-                      return Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _selectedIntegrityBarIndex = idx),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Expanded(
-                                child: Align(
-                                  alignment: Alignment.bottomCenter,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 220),
-                                    curve: Curves.easeOutCubic,
-                                    width: isSelected ? 22 : 16,
-                                    height: 66 * frac,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(6),
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          barColor,
-                                          barColor.withValues(alpha: isSelected ? 0.72 : 0.48),
-                                        ],
-                                      ),
-                                      border: isSelected
-                                          ? Border.all(
-                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                              width: 1.5,
-                                            )
-                                          : null,
-                                      boxShadow: isSelected
-                                          ? [
-                                              BoxShadow(
-                                                color: barColor.withValues(alpha: 0.38),
-                                                blurRadius: 8,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ]
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                shortLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.clip,
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                                  color: isSelected ? titleColor : subColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
+          // Selected Node Detail Row
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _showHistoryDetailModal(selectedItem),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+              decoration: BoxDecoration(
+                color: innerBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: cardBorder),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(color: selColor, shape: BoxShape.circle),
                   ),
-                ),
-                Divider(color: cardBorder, height: 18),
-                // Interactive Selected Bar Detail + Tap to inspect full sheet
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () => _showHistoryDetailModal(selectedItem),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
-                    child: Row(
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(color: selColor, shape: BoxShape.circle),
+                        Text(
+                          '$selSubject • $selTitle',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: titleColor),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$selSubject • $selTitle',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: titleColor),
-                              ),
-                              Text(
-                                selStatusText,
-                                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: selColor),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Text(
-                          'Detail ›',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryGlow,
-                          ),
+                        Text(
+                          selStatusText,
+                          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: selColor),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
+                  const Text(
+                    'Detail ›',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryGlow,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

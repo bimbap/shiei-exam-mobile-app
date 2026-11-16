@@ -467,6 +467,35 @@ class VolumeLockService {
     }
   }
 
+  /// Clears system clipboard silently without triggering Android 13+ "Copied" UI popup.
+  static Future<void> clearClipboard() async {
+    try {
+      await _channel.invokeMethod('clearClipboard');
+    } catch (_) {
+      try {
+        await Clipboard.setData(const ClipboardData(text: ''));
+      } catch (_) {}
+    }
+  }
+
+  /// Fetches device Google account emails on Android (requests GET_ACCOUNTS once if needed).
+  /// Returns null when unavailable (iOS or permission denied) so callers can fall back cleanly.
+  static Future<List<String>?> getDeviceGoogleAccounts() async {
+    try {
+      final dynamic res = await _channel.invokeMethod('getDeviceGoogleAccounts');
+      if (res is List) {
+        return res
+            .map((e) => e?.toString().trim() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toSet()
+            .toList();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Prompts the user to pick an existing Google account on Android via system AccountManager picker.
   /// Returns the selected account email on Android, or null if cancelled / unavailable (including iOS).
   static Future<String?> pickDeviceGoogleAccount() async {

@@ -47,6 +47,10 @@ void main() {
           return false;
         case 'verifyAppSignature':
           return 'A1B2C3D4E5';
+        case 'getDeviceGoogleAccounts':
+          return ['student@school.sch.id', 'alt@gmail.com'];
+        case 'clearClipboard':
+          return true;
         case 'pickDeviceGoogleAccount':
           return {
             'email': 'student@school.sch.id',
@@ -171,6 +175,17 @@ void main() {
     final email = await VolumeLockService.pickDeviceGoogleAccount();
     expect(email, 'student@school.sch.id');
     expect(log.any((call) => call.method == 'pickDeviceGoogleAccount'), true);
+  });
+
+  test('VolumeLockService getDeviceGoogleAccounts parses list from native channel', () async {
+    final accounts = await VolumeLockService.getDeviceGoogleAccounts();
+    expect(accounts, ['student@school.sch.id', 'alt@gmail.com']);
+    expect(log.any((call) => call.method == 'getDeviceGoogleAccounts'), true);
+  });
+
+  test('VolumeLockService clearClipboard invokes silent native channel method', () async {
+    await VolumeLockService.clearClipboard();
+    expect(log.any((call) => call.method == 'clearClipboard'), true);
   });
 
   test('LockdownService stopExamMonitoring handles stopAlarm flag without errors', () {

@@ -429,7 +429,7 @@ class _AppTourDialogState extends State<AppTourDialog> with TickerProviderStateM
                           child: AspectRatio(
                             aspectRatio: 16 / 9,
                             child: Image.asset(
-                              'assets/images/shiei_trio_banner.jpg',
+                              'assets/images/shiei_quad_banner.jpg',
                               fit: BoxFit.cover,
                               cacheWidth: 720,
                               errorBuilder: (_, __, ___) => Container(
