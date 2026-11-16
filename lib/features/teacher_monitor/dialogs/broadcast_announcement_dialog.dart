@@ -75,21 +75,60 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
     ]);
   }
 
-  static bool _isParticipantActiveInExam(Map<String, dynamic> session) {
+  static bool _isExamFinishedOrInactive(Map<String, dynamic>? exam) {
+    if (exam == null) return false;
+    final status = exam['status']?.toString().toLowerCase() ?? 'active';
+    final isActive = exam['is_active'] ?? (status == 'active');
+    if (isActive == false || status == 'inactive') return true;
+    final endTimeStr = exam['end_time']?.toString();
+    if (endTimeStr != null && endTimeStr.isNotEmpty) {
+      final end = DateTime.tryParse(endTimeStr);
+      if (end != null && DateTime.now().isAfter(end)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Map<String, dynamic>? _findSelectedExam() {
+    if (_selectedExamId == null) return null;
+    for (final e in widget.controller.exams) {
+      if (e['id'] == _selectedExamId) return e;
+    }
+    return null;
+  }
+
+  bool get _isSelectedExamEnded => _isExamFinishedOrInactive(_findSelectedExam());
+
+  static bool _isParticipantWorkingInExam(
+    Map<String, dynamic> session, {
+    bool examEnded = false,
+  }) {
+    if (examEnded) return false;
+    final linkEndStr = session['link']?['end_time']?.toString();
+    if (linkEndStr != null && linkEndStr.isNotEmpty) {
+      final end = DateTime.tryParse(linkEndStr);
+      if (end != null && DateTime.now().isAfter(end)) return false;
+    }
+
     final status = (session['status'] ?? '').toString().toLowerCase();
-    final score = num.tryParse(session['score']?.toString() ?? '');
-    final isCompleted = status == 'completed' ||
-        status == 'submitted' ||
-        (score != null && score > 0);
+    final hasScore = session['score'] != null;
+    final isCompleted = status == 'completed' || status == 'submitted' || hasScore;
     final isTerminated = status == 'terminated' ||
         status == 'exited' ||
-        session['lock_reason']?.toString() == 'proctor_kick';
-    if (isCompleted || isTerminated) return false;
-    return status == 'in_progress' ||
-        status == 'split_screen' ||
+        session['lock_reason']?.toString() == 'proctor_kick' ||
+        session['is_kicked'] == true;
+    final isLocked = session['is_locked'] == true ||
         status == 'locked' ||
-        status == 'pending' ||
-        session['is_locked'] == true;
+        status == 'split_screen';
+    final secHeartbeat = int.tryParse(
+      session['seconds_since_heartbeat']?.toString() ?? '',
+    );
+    final isOffline = session['is_online'] == false ||
+        (secHeartbeat != null && secHeartbeat > 10);
+
+    if (isCompleted || isTerminated || isLocked || isOffline) return false;
+    return status == 'in_progress' || status == 'started';
   }
 
   static int? _extractParticipantUserId(Map<String, dynamic> session) {
@@ -99,23 +138,25 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
   }
 
   Future<void> _loadParticipants() async {
-    if (_selectedExamId == null) {
+    if (_selectedExamId == null || _isSelectedExamEnded) {
       if (mounted) {
         setState(() {
           _activeParticipants = [];
           _selectedStudentIds.clear();
+          _isLoadingParticipants = false;
         });
       }
       return;
     }
     setState(() => _isLoadingParticipants = true);
     final sessions = await widget.controller.loadExamParticipants(_selectedExamId);
+    final examEnded = _isSelectedExamEnded;
     final seenIds = <int>{};
     final activeList = <Map<String, dynamic>>[];
     for (final s in sessions) {
       final uid = _extractParticipantUserId(s);
       if (uid == null || !seenIds.add(uid)) continue;
-      if (!_isParticipantActiveInExam(s)) continue;
+      if (!_isParticipantWorkingInExam(s, examEnded: examEnded)) continue;
       activeList.add(s);
     }
     activeList.sort((a, b) {
@@ -145,6 +186,15 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
   }
 
   Future<void> _handleSend() async {
+    if (_isSelectedExamEnded) {
+      AppNotification.showError(
+        context,
+        'Ujian Sudah Berakhir',
+        subtitle: 'Pengiriman pengumuman dinonaktifkan untuk ujian yang sudah selesai.',
+      );
+      return;
+    }
+
     final text = _messageController.text.trim();
     if (text.isEmpty) {
       AppNotification.showError(context, 'Pesan Kosong', subtitle: 'Ketik isi pengumuman terlebih dahulu.');
@@ -206,6 +256,9 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
   Widget build(BuildContext context) {
     final isDark = AppTheme.isDark(context);
     final exams = widget.controller.activeExams;
+    final selectedExam = _findSelectedExam();
+    final isComposerDisabled =
+        _selectedExamId == null ? exams.isEmpty : _isSelectedExamEnded;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return GestureDetector(
@@ -293,14 +346,11 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
               placeholder: 'Pilih Jadwal Ujian Aktif',
               prefixIcon: Icons.menu_book_rounded,
               valueText: () {
-                final cur = exams.cast<Map<String, dynamic>?>().firstWhere(
-                  (e) => e?['id'] == _selectedExamId,
-                  orElse: () => null,
-                );
-                if (cur == null) return null;
-                final t = cur['title']?.toString() ?? 'Ujian';
-                final s = cur['subject']?.toString() ?? '';
-                return s.isNotEmpty ? '$t • $s' : t;
+                if (selectedExam == null) return null;
+                final t = selectedExam['title']?.toString() ?? 'Ujian';
+                final s = selectedExam['subject']?.toString() ?? '';
+                final base = s.isNotEmpty ? '$t • $s' : t;
+                return _isSelectedExamEnded ? '$base (Selesai)' : base;
               }(),
               onTap: () async {
                 FocusScope.of(context).unfocus();
@@ -344,7 +394,51 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
             ),
             const SizedBox(height: 14),
 
-            // 1.5 Target Recipient Mode (All vs Selected Active Students)
+            if (isComposerDisabled) ...[
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.event_busy_rounded,
+                      size: 18,
+                      color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _selectedExamId != null
+                            ? 'Jadwal ujian ini telah selesai atau nonaktif. Pengiriman pengumuman dinonaktifkan.'
+                            : 'Tidak ada jadwal ujian yang sedang aktif saat ini.',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            IgnorePointer(
+              ignoring: isComposerDisabled,
+              child: Opacity(
+                opacity: isComposerDisabled ? 0.5 : 1.0,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+            // 1.5 Target Recipient Mode (All vs Selected Working Students)
             Text(
               'Sasaran Penerima',
               style: TextStyle(
@@ -373,7 +467,7 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                 ),
               ],
             ),
-            if (_targetScope == 'selected') ...[
+            if (!isComposerDisabled && _targetScope == 'selected') ...[
               const SizedBox(height: 10),
               _buildSelectedParticipantsBox(isDark),
             ],
@@ -424,13 +518,15 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                       color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
                     ),
                   ),
-                  onPressed: () {
-                    FocusScope.of(context).unfocus();
-                    _messageController.text = preset;
-                    _messageController.selection = TextSelection.fromPosition(
-                      TextPosition(offset: _messageController.text.length),
-                    );
-                  },
+                  onPressed: isComposerDisabled
+                      ? null
+                      : () {
+                          FocusScope.of(context).unfocus();
+                          _messageController.text = preset;
+                          _messageController.selection = TextSelection.fromPosition(
+                            TextPosition(offset: _messageController.text.length),
+                          );
+                        },
                 );
               }).toList(),
             ),
@@ -440,6 +536,7 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
             _buildLabel('Isi Pesan Pengumuman *', isDark),
             TextField(
               controller: _messageController,
+              enabled: !isComposerDisabled,
               maxLines: 3,
               maxLength: 500,
               textInputAction: TextInputAction.done,
@@ -447,7 +544,9 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
               onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
               style: TextStyle(fontSize: 13, color: isDark ? Colors.white : const Color(0xFF0F172A)),
               decoration: InputDecoration(
-                hintText: 'Ketik pesan pengumuman atau ralat soal di sini...',
+                hintText: isComposerDisabled
+                    ? 'Ujian telah selesai. Pengiriman dinonaktifkan.'
+                    : 'Ketik pesan pengumuman atau ralat soal di sini...',
                 hintStyle: TextStyle(fontSize: 12.5, color: isDark ? AppTheme.textSecondary : const Color(0xFF94A3B8)),
                 filled: true,
                 fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
@@ -470,7 +569,8 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
               builder: (context, _) {
                 final bool hasValidTarget =
                     _targetScope == 'all' || _selectedStudentIds.isNotEmpty;
-                final bool canSubmit = !_isSending &&
+                final bool canSubmit = !isComposerDisabled &&
+                    !_isSending &&
                     _selectedExamId != null &&
                     hasValidTarget &&
                     _messageController.text.trim().isNotEmpty;
@@ -497,17 +597,23 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                           )
                         : const Icon(Icons.send_rounded, size: 18),
                     label: Text(
-                      _isSending
-                          ? 'Menyiarkan...'
-                          : (_targetScope == 'selected'
-                              ? 'Kirim ke ${_selectedStudentIds.length} Murid Terpilih'
-                              : 'Siarkan ke Semua Peserta'),
+                      isComposerDisabled
+                          ? 'Ujian Telah Selesai'
+                          : (_isSending
+                              ? 'Menyiarkan...'
+                              : (_targetScope == 'selected'
+                                  ? 'Kirim ke ${_selectedStudentIds.length} Murid Terpilih'
+                                  : 'Siarkan ke Semua Peserta')),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                     ),
                     onPressed: canSubmit ? _handleSend : null,
                   ),
                 );
               },
+            ),
+                  ],
+                ),
+              ),
             ),
 
             // 6. Active Announcements List
