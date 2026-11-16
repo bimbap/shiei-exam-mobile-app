@@ -43,6 +43,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
   final TextEditingController _historySearchController = TextEditingController();
   String _historySearchQuery = '';
+  int? _selectedIntegrityBarIndex;
 
   late final TourTargetKeys _tourKeys = TourTargetKeys();
 
@@ -2356,73 +2357,74 @@ class _ExamListScreenState extends State<ExamListScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                if (hasWarningTab) ...[
-                  Container(
-                    height: 42,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final tabWidth = constraints.maxWidth / 2;
-                        return Stack(
-                          children: [
-                            AnimatedPositioned(
-                              duration: const Duration(milliseconds: 240),
-                              curve: Curves.easeOutCubic,
-                              left: activeDetailTab == 0 ? 0 : tabWidth,
-                              top: 0,
-                              bottom: 0,
-                              width: tabWidth,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                                  borderRadius: BorderRadius.circular(9),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
-                                      blurRadius: 6,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
+                Container(
+                  height: 42,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final tabCount = hasWarningTab ? 2 : 1;
+                      final tabWidth = constraints.maxWidth / tabCount;
+                      return Stack(
+                        children: [
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 240),
+                            curve: Curves.easeOutCubic,
+                            left: (!hasWarningTab || activeDetailTab == 0) ? 0 : tabWidth,
+                            top: 0,
+                            bottom: 0,
+                            width: tabWidth,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                borderRadius: BorderRadius.circular(9),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
                             ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () => setSheetState(() => activeDetailTab = 0),
-                                    child: Center(
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.info_outline_rounded,
-                                            size: 15,
-                                            color: activeDetailTab == 0
-                                                ? AppTheme.primaryGlow
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => setSheetState(() => activeDetailTab = 0),
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.info_outline_rounded,
+                                          size: 15,
+                                          color: (!hasWarningTab || activeDetailTab == 0)
+                                              ? AppTheme.primaryGlow
+                                              : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Info Ujian',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: (!hasWarningTab || activeDetailTab == 0)
+                                                ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
                                                 : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
                                           ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            'Info Ujian',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: activeDetailTab == 0
-                                                  ? (isDark ? Colors.white : AppTheme.textPrimaryLight)
-                                                  : (isDark ? AppTheme.textSecondary : AppTheme.textSecondaryLight),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
+                              ),
+                              if (hasWarningTab)
                                 Expanded(
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
@@ -2440,7 +2442,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
-                                            violationsCount > 0 ? 'Peringatan ($violationsCount)' : 'Peringatan',
+                                            violationsCount > 0 ? 'Pelanggaran ($violationsCount)' : 'Pelanggaran',
                                             style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.bold,
@@ -2454,15 +2456,14 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                     ),
                                   ),
                                 ),
-                              ],
-                            ),
-                          ],
-                        );
-                      },
-                    ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  const SizedBox(height: 12),
-                ],
+                ),
+                const SizedBox(height: 12),
 
                 AnimatedSize(
                   duration: const Duration(milliseconds: 240),
@@ -3692,6 +3693,22 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
 
 
+                    // 1.5 Statistik Integritas & Kerajinan Ujian (Interactive Card)
+                    const SizedBox(height: 18),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 8),
+                      child: Text(
+                        'STATISTIK INTEGRITAS UJIAN',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ),
+                    _buildProfileIntegrityStatsCard(isDark),
+
                     // 2. Pengaturan Akun & Preferensi (Grouped Bento Surface)
                     const SizedBox(height: 18),
                     Padding(
@@ -3867,6 +3884,472 @@ class _ExamListScreenState extends State<ExamListScreen> {
     },
   );
 }
+
+  Widget _buildProfileIntegrityStatsCard(bool isDark) {
+    final history = _controller.history;
+    final cardBg = isDark ? AppTheme.surfaceDark : Colors.white;
+    final cardBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final innerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? AppTheme.textSecondary : const Color(0xFF64748B);
+
+    if (_controller.isHistoryLoading && !_controller.hasLoadedHistory) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cardBorder),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryGlow),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Memuat grafik kedisiplinan ujian...',
+              style: TextStyle(fontSize: 12, color: subColor),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (history.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cardBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryShiei.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.insights_rounded, color: AppTheme.primaryGlow, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Belum Ada Data Grafik Ujian',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: titleColor),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Statistik ketertiban tanpa peringatan otomatis muncul setelah ujian selesai.',
+                    style: TextStyle(fontSize: 11.2, color: subColor, height: 1.35),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    int participatedCount = 0;
+    int cleanCompletedCount = 0;
+    int totalViolations = 0;
+    int currentCleanStreak = 0;
+    bool streakBroken = false;
+
+    for (final item in history) {
+      final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
+      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+      final violationLogs = (item['violation_logs'] as List?) ?? const [];
+      final isLocked = item['is_locked'] == true ||
+          rawStatus == 'locked' ||
+          rawStatus == 'terminated' ||
+          rawStatus == 'exited';
+      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
+      final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
+      final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+      final hasViolation = isLocked || violationsCount > 0 || violationLogs.isNotEmpty;
+      final isMissed = isEnded && !isCompleted && !isLocked && elapsedSec <= 0;
+
+      if (!isMissed) {
+        participatedCount++;
+        totalViolations += violationsCount;
+      }
+      if (isCompleted && !hasViolation) {
+        cleanCompletedCount++;
+        if (!streakBroken) {
+          currentCleanStreak++;
+        }
+      } else if (!isMissed) {
+        streakBroken = true;
+      }
+    }
+
+    final cleanRate = participatedCount > 0
+        ? ((cleanCompletedCount / participatedCount) * 100).round().clamp(0, 100)
+        : 0;
+
+    // Show up to 8 most recent exams in chronological left-to-right order
+    final recentItems = history.take(8).toList().reversed.toList();
+    final selectedIdx = (_selectedIntegrityBarIndex != null &&
+            _selectedIntegrityBarIndex! >= 0 &&
+            _selectedIntegrityBarIndex! < recentItems.length)
+        ? _selectedIntegrityBarIndex!
+        : recentItems.length - 1;
+    final selectedItem = recentItems[selectedIdx];
+
+    Color resolveBarColor(Map<String, dynamic> item) {
+      final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
+      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+      final violationLogs = (item['violation_logs'] as List?) ?? const [];
+      final isLocked = item['is_locked'] == true ||
+          rawStatus == 'locked' ||
+          rawStatus == 'terminated' ||
+          rawStatus == 'exited';
+      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
+      final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
+      final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+
+      if (isLocked) return AppTheme.dangerRed;
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return AppTheme.accentGreen;
+      if (isCompleted) return const Color(0xFFF59E0B);
+      if (isEnded && elapsedSec <= 0) return const Color(0xFF94A3B8);
+      return AppTheme.primaryBlue;
+    }
+
+    double resolveBarFraction(Map<String, dynamic> item) {
+      final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
+      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+      final violationLogs = (item['violation_logs'] as List?) ?? const [];
+      final isLocked = item['is_locked'] == true ||
+          rawStatus == 'locked' ||
+          rawStatus == 'terminated' ||
+          rawStatus == 'exited';
+      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
+      final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
+      final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+
+      if (isLocked) return 0.34;
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 1.0;
+      if (isCompleted) return (0.76 - (violationsCount * 0.08)).clamp(0.45, 0.76);
+      if (isEnded && elapsedSec <= 0) return 0.22;
+      return 0.65;
+    }
+
+    String resolveBarStatusText(Map<String, dynamic> item) {
+      final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
+      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+      final violationLogs = (item['violation_logs'] as List?) ?? const [];
+      final isLocked = item['is_locked'] == true ||
+          rawStatus == 'locked' ||
+          rawStatus == 'terminated' ||
+          rawStatus == 'exited';
+      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
+      final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
+      final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+
+      if (isLocked) return 'Terkunci ($violationsCount pelanggaran)';
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 'Tertib • 0 Peringatan';
+      if (isCompleted) return 'Selesai • $violationsCount Peringatan';
+      if (isEnded && elapsedSec <= 0) return 'Tidak Dikerjakan';
+      return 'Sedang Berlangsung';
+    }
+
+    final selLink = selectedItem['link'] is Map ? selectedItem['link'] as Map : const {};
+    final selTitle = selLink['title']?.toString() ?? 'Ujian Digital';
+    final selSubject = selLink['subject']?.toString() ?? 'Umum';
+    final selColor = resolveBarColor(selectedItem);
+    final selStatusText = resolveBarStatusText(selectedItem);
+
+    final rateColor = cleanRate >= 85
+        ? AppTheme.accentGreen
+        : (cleanRate >= 60 ? const Color(0xFFF59E0B) : AppTheme.dangerRed);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Header & Streak Pill
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Kedisiplinan Ujian',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: titleColor),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Ketuk batang grafik untuk cek detail ujian',
+                      style: TextStyle(fontSize: 11, color: subColor),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: rateColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: rateColor.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      currentCleanStreak > 0
+                          ? Icons.local_fire_department_rounded
+                          : Icons.shield_outlined,
+                      size: 14,
+                      color: rateColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      currentCleanStreak > 0 ? '$currentCleanStreak× Beruntun Tertib' : '$cleanRate% Bersih',
+                      style: TextStyle(fontSize: 10.8, fontWeight: FontWeight.w800, color: rateColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Summary KPI Chips Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatMiniTile(
+                  label: 'Tertib (0 Alert)',
+                  value: '$cleanCompletedCount / $participatedCount',
+                  color: AppTheme.accentGreen,
+                  innerBg: innerBg,
+                  border: cardBorder,
+                  subColor: subColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatMiniTile(
+                  label: 'Skor Disiplin',
+                  value: '$cleanRate%',
+                  color: rateColor,
+                  innerBg: innerBg,
+                  border: cardBorder,
+                  subColor: subColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildStatMiniTile(
+                  label: 'Total Peringatan',
+                  value: '$totalViolations',
+                  color: totalViolations == 0 ? AppTheme.accentGreen : AppTheme.dangerRed,
+                  innerBg: innerBg,
+                  border: cardBorder,
+                  subColor: subColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Interactive Vertical Bar Chart (last 8 exams)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+            decoration: BoxDecoration(
+              color: innerBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cardBorder),
+            ),
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 92,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(recentItems.length, (idx) {
+                      final barItem = recentItems[idx];
+                      final barColor = resolveBarColor(barItem);
+                      final frac = resolveBarFraction(barItem);
+                      final isSelected = idx == selectedIdx;
+                      final rawSubject = (barItem['link']?['subject'] ?? 'U${idx + 1}').toString();
+                      final shortLabel = rawSubject.length > 4
+                          ? rawSubject.substring(0, 4).toUpperCase()
+                          : rawSubject.toUpperCase();
+
+                      return Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _selectedIntegrityBarIndex = idx),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Curves.easeOutCubic,
+                                    width: isSelected ? 22 : 16,
+                                    height: 66 * frac,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(6),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          barColor,
+                                          barColor.withValues(alpha: isSelected ? 0.72 : 0.48),
+                                        ],
+                                      ),
+                                      border: isSelected
+                                          ? Border.all(
+                                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                              width: 1.5,
+                                            )
+                                          : null,
+                                      boxShadow: isSelected
+                                          ? [
+                                              BoxShadow(
+                                                color: barColor.withValues(alpha: 0.38),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                shortLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                  color: isSelected ? titleColor : subColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                Divider(color: cardBorder, height: 18),
+                // Interactive Selected Bar Detail + Tap to inspect full sheet
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _showHistoryDetailModal(selectedItem),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 9,
+                          height: 9,
+                          decoration: BoxDecoration(color: selColor, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '$selSubject • $selTitle',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: titleColor),
+                              ),
+                              Text(
+                                selStatusText,
+                                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: selColor),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Text(
+                          'Detail ›',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryGlow,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatMiniTile({
+    required String label,
+    required String value,
+    required Color color,
+    required Color innerBg,
+    required Color border,
+    required Color subColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: innerBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: color),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: subColor),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildExamCard(Map<String, dynamic> exam) {
     final isDark = AppTheme.isDark(context);

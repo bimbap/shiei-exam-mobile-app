@@ -116,11 +116,6 @@ class LegalDocumentScreen extends StatelessWidget {
       body:
           'Pertukaran token dan laporan pengawasan antara aplikasi klien dan server sekolah menggunakan validasi integritas sesi untuk menjaga kerahasiaan data peserta didik.',
     ),
-    ProLegalSection(
-      title: '8. Kontak Dukungan Hukum & Privasi',
-      body:
-          'Untuk pertanyaan teknis maupun klarifikasi kepatuhan privasi sekolah, hubungi pengembang melalui contact@hexadev.my.id atau kunjungi https://shiei.hexadev.my.id.',
-    ),
   ];
 
   @override
@@ -265,38 +260,6 @@ class LegalDocumentScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: innerBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Kontak Resmi Hukum & Privasi',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: titleColor,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'HexaDev / Project SHIEI · contact@hexadev.my.id · https://shiei.hexadev.my.id',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: bodyColor,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],
