@@ -7,12 +7,14 @@ import '../../shared/theme/app_theme.dart';
 
 class UrlExamPlayer extends StatefulWidget {
   final String url;
+  final bool incognito;
   final VoidCallback onPageLoaded;
   final void Function(InAppWebViewController controller)? onControllerCreated;
 
   const UrlExamPlayer({
     super.key,
     required this.url,
+    this.incognito = false,
     required this.onPageLoaded,
     this.onControllerCreated,
   });
@@ -132,11 +134,13 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
             javaScriptEnabled: true,
             useShouldOverrideUrlLoading: true,
             supportZoom: false,
+            incognito: widget.incognito,
+            saveFormData: false,
             disableContextMenu: true, // Disables text copy/paste selection menu
-            clearCache: false,
-            cacheEnabled: true,
-            thirdPartyCookiesEnabled: true,
-            sharedCookiesEnabled: true,
+            clearCache: widget.incognito,
+            cacheEnabled: !widget.incognito,
+            thirdPartyCookiesEnabled: !widget.incognito,
+            sharedCookiesEnabled: !widget.incognito,
             userAgent: UrlExamPlayer.browserCompatibleUserAgent,
             hardwareAcceleration: true,
             transparentBackground: false,

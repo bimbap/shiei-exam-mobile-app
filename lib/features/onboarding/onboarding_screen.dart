@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../config/routes.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/lockdown/volume_lock_service.dart';
 import '../../core/notifications/exam_reminder_service.dart';
 import '../../core/theme/theme_controller.dart';
 import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../exam_player/url_exam_player.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -19,12 +22,63 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   bool _isNotificationGranted = false;
   bool _canInstallPackages = false;
+  bool _keepBrowserLogin = true;
+  bool _browserLoginConnected = false;
+  String? _browserLoginEmail;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkPermissions();
+    _loadBrowserModeState();
+  }
+
+  Future<void> _loadBrowserModeState() async {
+    final keep = await TokenStorage.isKeepBrowserLoginEnabled();
+    final meta = await TokenStorage.getBrowserLoginMeta();
+    if (!mounted) return;
+    setState(() {
+      _keepBrowserLogin = keep;
+      _browserLoginConnected = meta['connected'] == true;
+      _browserLoginEmail = meta['email']?.toString();
+    });
+  }
+
+  Future<void> _setBrowserMode(bool keepLogin) async {
+    setState(() => _keepBrowserLogin = keepLogin);
+    await TokenStorage.setKeepBrowserLoginEnabled(keepLogin);
+    if (!keepLogin) {
+      await UrlExamPlayer.clearBrowserSessionCookies();
+      await TokenStorage.clearBrowserLoginMeta();
+      if (mounted) {
+        setState(() {
+          _browserLoginConnected = false;
+          _browserLoginEmail = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _connectGoogleDuringOnboarding() async {
+    String? pickedEmail;
+    if (Platform.isAndroid) {
+      pickedEmail = await VolumeLockService.pickDeviceGoogleAccount();
+      if (pickedEmail == null || pickedEmail.isEmpty) return;
+      if (_browserLoginEmail != null &&
+          _browserLoginEmail!.toLowerCase() != pickedEmail.toLowerCase()) {
+        await UrlExamPlayer.clearBrowserSessionCookies();
+      }
+    }
+    if (!mounted) return;
+    await Navigator.of(context).pushNamed(
+      AppRoutes.browserConnect,
+      arguments: <String, dynamic>{
+        if (pickedEmail != null) 'prefillEmail': pickedEmail,
+        'providerLabel': 'Akun Google',
+      },
+    );
+    await _loadBrowserModeState();
   }
 
   @override
@@ -98,7 +152,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   void _onNext() async {
     if (!_canProceed) return;
-    if (_currentIndex < 4) {
+    if (_currentIndex < 5) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
@@ -121,7 +175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    final bool isLast = _currentIndex == 4;
+    final bool isLast = _currentIndex == 5;
     final isDark = AppTheme.isDark(context);
     final bg = AppTheme.background(context);
     final skipColor = isDark ? AppTheme.textSecondary : const Color(0xFF64748B);
@@ -171,7 +225,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               ),
             ),
 
-            // Middle: Swipeable Carousel Content (5 Slides)
+            // Middle: Swipeable Carousel Content (6 Slides)
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -185,6 +239,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                   _buildSlideThemeSelector(isDark),
                   _buildSlide2Notification(isDark),
                   _buildSlide3AppInstall(isDark),
+                  _buildSlideBrowserModeSelector(isDark),
                   _buildSlide4Rules(isDark),
                 ],
               ),
@@ -195,11 +250,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
               child: Column(
                 children: [
-                  // Animated Dots Indicator (5 dots)
+                  // Animated Dots Indicator (6 dots)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      5,
+                      6,
                       (idx) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -661,6 +716,224 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
               ),
+      ),
+    );
+  }
+
+  // --- SLIDE 5: BROWSER SESSION MODE (CONNECTED VS GUEST INCOGNITO) ---
+  Widget _buildSlideBrowserModeSelector(bool isDark) {
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final descColor = isDark ? AppTheme.textSecondary : const Color(0xFF475569);
+    final tagBg = isDark ? AppTheme.surfaceCard : const Color(0xFFF1F5F9);
+    final tagBorder = isDark ? AppTheme.borderSubtle : const Color(0xFFE2E8F0);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight - 16),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: isDark
+                          ? [
+                              AppTheme.primaryGlow.withValues(alpha: 0.24),
+                              AppTheme.surfaceDark.withValues(alpha: 0.9),
+                            ]
+                          : [
+                              AppTheme.primaryGlow.withValues(alpha: 0.16),
+                              Colors.white,
+                            ],
+                    ),
+                    border: Border.all(
+                      color: AppTheme.primaryShiei.withValues(alpha: 0.35),
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.public_rounded,
+                    size: 44,
+                    color: AppTheme.primaryGlow,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: tagBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: tagBorder),
+                  ),
+                  child: const Text(
+                    'PREFERENSI BROWSER UJIAN',
+                    style: TextStyle(
+                      color: AppTheme.primaryGlow,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Mode Login Browser Ujian',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: titleColor,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 340),
+                  child: Text(
+                    'Tentukan apakah browser ujian menyimpan sesi akun Anda atau selalu berjalan bersih tanpa history (Incognito). Dapat diubah kapan saja di Pengaturan.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: descColor,
+                      fontSize: 12.5,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildBrowserModeCard(
+                  title: 'Connected Account (WebView)',
+                  subtitle: _browserLoginConnected
+                      ? 'Terhubung: ${_browserLoginEmail ?? 'Akun Web'}'
+                      : 'Simpan login Google / portal CBT agar siap dipakai saat ujian (tanpa history Chrome/Safari)',
+                  icon: Icons.verified_user_rounded,
+                  iconColor: AppTheme.primaryGlow,
+                  isSelected: _keepBrowserLogin,
+                  isDark: isDark,
+                  onTap: () => _setBrowserMode(true),
+                  trailingAction: _keepBrowserLogin
+                      ? TextButton.icon(
+                          onPressed: _connectGoogleDuringOnboarding,
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          ),
+                          icon: const Icon(Icons.login_rounded, size: 15),
+                          label: Text(
+                            _browserLoginConnected ? 'Ganti Akun' : 'Hubungkan Sekarang',
+                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                _buildBrowserModeCard(
+                  title: 'Guest WebView (Incognito)',
+                  subtitle: 'Mode penyamaran penuh: tanpa akun, tanpa history, dan cookie otomatis terhapus tiap ujian',
+                  icon: Icons.security_rounded,
+                  iconColor: const Color(0xFF10B981),
+                  isSelected: !_keepBrowserLogin,
+                  isDark: isDark,
+                  onTap: () => _setBrowserMode(false),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBrowserModeCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color iconColor,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+    Widget? trailingAction,
+  }) {
+    final activeBg = isDark
+        ? AppTheme.primaryShiei.withValues(alpha: 0.18)
+        : AppTheme.primaryShiei.withValues(alpha: 0.08);
+    final idleBg = isDark
+        ? const Color(0xFF1E293B).withValues(alpha: 0.7)
+        : const Color(0xFFF8FAFC);
+    final idleBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subColor = isDark ? AppTheme.textSecondary : const Color(0xFF64748B);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected ? activeBg : idleBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryShiei : idleBorder,
+            width: isSelected ? 1.8 : 1.1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.bold,
+                          color: titleColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 11.5, color: subColor, height: 1.35),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: isSelected ? AppTheme.primaryShiei : subColor,
+                  size: 20,
+                ),
+              ],
+            ),
+            if (trailingAction != null) ...[
+              const SizedBox(height: 6),
+              Align(alignment: Alignment.centerRight, child: trailingAction),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -28,9 +28,6 @@ class BrowserLoginConnectScreen extends StatefulWidget {
 }
 
 class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
-  static const String _defaultGoogleContinueUrl =
-      'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fdocs.google.com%2Fforms';
-
   InAppWebViewController? _webController;
   double _progress = 0;
   late String _currentUrl;
@@ -43,8 +40,18 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
   void initState() {
     super.initState();
     final raw = (widget.initialUrl ?? '').trim();
-    _currentUrl = _normalizeConnectUrl(raw) ?? _defaultGoogleContinueUrl;
+    _currentUrl = _normalizeConnectUrl(raw) ??
+        _buildGoogleLoginUrl(prefillEmail: widget.prefillEmail);
     _isGoogleFlow = _isGoogleHost(_currentUrl);
+  }
+
+  static String _buildGoogleLoginUrl({String? prefillEmail}) {
+    final email = (prefillEmail ?? '').trim();
+    return Uri.https('accounts.google.com', '/ServiceLogin', {
+      'continue': 'https://docs.google.com/forms',
+      if (email.isNotEmpty) 'Email': email,
+      if (email.isNotEmpty) 'login_hint': email,
+    }).toString();
   }
 
   static bool _isGoogleHost(String url) {
@@ -92,20 +99,32 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
 
     _didInjectEmail = true;
     final encodedEmail = jsonEncode(email);
-    await controller.evaluateJavascript(source: '''
-      (function() {
-        try {
-          var targetEmail = $encodedEmail;
-          var input = document.querySelector('input[type="email"], input#identifierId');
-          if (input && (!input.value || input.value !== targetEmail)) {
-            input.focus();
-            input.value = targetEmail;
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            input.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        } catch(e) {}
-      })();
-    ''');
+    for (int attempt = 0; attempt < 4; attempt++) {
+      if (!mounted) return;
+      final filled = await controller.evaluateJavascript(source: '''
+        (function() {
+          try {
+            var targetEmail = $encodedEmail;
+            var input = document.querySelector('input[type="email"], input#identifierId, input[name="identifier"]');
+            if (!input) return false;
+            var nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (input.value !== targetEmail) {
+              input.focus();
+              if (nativeSetter) {
+                nativeSetter.call(input, targetEmail);
+              } else {
+                input.value = targetEmail;
+              }
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return input.value === targetEmail;
+          } catch(e) { return false; }
+        })();
+      ''');
+      if (filled == true) break;
+      await Future.delayed(const Duration(milliseconds: 250));
+    }
   }
 
   Future<void> _checkAuthCompletion(String loadedUrl) async {

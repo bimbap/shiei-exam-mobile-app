@@ -48,6 +48,27 @@ void main() {
       saved = await TokenStorage.getThemeMode();
       expect(saved, equals('system'));
     });
+
+    test('Browser session mode defaults to connected and toggles Guest Incognito cleanly', () async {
+      expect(await TokenStorage.isKeepBrowserLoginEnabled(), isTrue);
+
+      await TokenStorage.saveBrowserLoginMeta(
+        connected: true,
+        label: 'Akun Google',
+        email: 'siswa@school.sch.id',
+        url: 'https://docs.google.com/forms',
+      );
+      final meta = await TokenStorage.getBrowserLoginMeta();
+      expect(meta['connected'], isTrue);
+      expect(meta['email'], equals('siswa@school.sch.id'));
+
+      await TokenStorage.setKeepBrowserLoginEnabled(false);
+      await TokenStorage.clearBrowserLoginMeta();
+      expect(await TokenStorage.isKeepBrowserLoginEnabled(), isFalse);
+      final cleared = await TokenStorage.getBrowserLoginMeta();
+      expect(cleared['connected'], isFalse);
+      expect(cleared['email'], isNull);
+    });
   });
 
   group('AppTheme Palette & ThemeData Tests', () {

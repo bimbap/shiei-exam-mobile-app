@@ -504,25 +504,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Color dividerColor,
   ) {
     final isAndroid = Platform.isAndroid;
-    final statusColor = _browserLoginConnected
+    final statusColor = !_keepBrowserLogin
         ? AppTheme.accentGreen
-        : (_keepBrowserLogin ? AppTheme.primaryGlow : const Color(0xFFF59E0B));
+        : (_browserLoginConnected ? AppTheme.accentGreen : AppTheme.primaryGlow);
 
-    final accountTitle = _browserLoginConnected
-        ? (_browserLoginEmail?.isNotEmpty == true
-            ? _browserLoginEmail!
-            : (_browserLoginLabel ?? 'Akun Browser Terhubung'))
-        : (isAndroid ? 'Akun Google Perangkat' : 'Akun Browser / Portal Ujian');
+    final accountTitle = !_keepBrowserLogin
+        ? 'Guest WebView (Incognito)'
+        : (_browserLoginConnected
+            ? (_browserLoginEmail?.isNotEmpty == true
+                ? _browserLoginEmail!
+                : (_browserLoginLabel ?? 'Akun Browser Terhubung'))
+            : (isAndroid ? 'Connected Mode • Akun Google' : 'Connected Mode • Akun Web'));
 
-    final statusText = _browserLoginConnected
-        ? 'Terhubung (${_browserLoginLabel ?? 'Sesi Aktif'})'
-        : (_keepBrowserLogin
-            ? (isAndroid
-                ? 'Deteksi otomatis akun Google di HP Anda'
-                : 'Masuk sebelum ujian agar sesi tersimpan')
-            : 'Mode bersih aktif (cookie direset tiap ujian)');
+    final statusText = !_keepBrowserLogin
+        ? 'Tanpa history & tanpa cookie tersimpan'
+        : (_browserLoginConnected
+            ? 'Terhubung (${_browserLoginLabel ?? 'Sesi Aktif'})'
+            : (isAndroid
+                ? 'Deteksi akun Google perangkat & simpan sesi WebView'
+                : 'Masuk sebelum ujian agar sesi web tersimpan'));
 
-    final avatarInitial = (_browserLoginConnected &&
+    final avatarInitial = (_keepBrowserLogin &&
+            _browserLoginConnected &&
             _browserLoginEmail != null &&
             _browserLoginEmail!.isNotEmpty)
         ? _browserLoginEmail!.substring(0, 1).toUpperCase()
@@ -559,9 +562,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         )
                       : Icon(
-                          isAndroid
-                              ? Icons.account_circle_rounded
-                              : Icons.verified_user_rounded,
+                          !_keepBrowserLogin
+                              ? Icons.security_rounded
+                              : (isAndroid
+                                  ? Icons.account_circle_rounded
+                                  : Icons.verified_user_rounded),
                           color: statusColor,
                           size: 22,
                         ),
@@ -599,99 +604,156 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
           Divider(color: dividerColor, height: 22),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Pertahankan Sesi Login Browser',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: titleColor,
+          // Mode Preference Toggle: Connected vs Guest WebView (Incognito)
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cardBorder),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: _keepBrowserLogin ? null : () => _toggleKeepBrowserLogin(true),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _keepBrowserLogin ? AppTheme.primaryShiei : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Connected (Simpan Akun)',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: _keepBrowserLogin ? Colors.white : textColor,
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _keepBrowserLogin
-                          ? 'Login Google / CBT otomatis terbawa saat mode kiosk'
-                          : 'Cookie web dihapus otomatis tiap ujian dimulai & selesai',
-                      style: TextStyle(fontSize: 11, color: textColor),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: !_keepBrowserLogin ? null : () => _toggleKeepBrowserLogin(false),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: !_keepBrowserLogin
+                            ? (isDark ? const Color(0xFF1E293B) : Colors.white)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        border: !_keepBrowserLogin
+                            ? Border.all(color: AppTheme.accentGreen.withValues(alpha: 0.5))
+                            : null,
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Guest (Incognito)',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: !_keepBrowserLogin ? AppTheme.accentGreen : textColor,
+                          ),
+                        ),
+                      ),
                     ),
-                  ],
-                ),
-              ),
-              Switch(
-                value: _keepBrowserLogin,
-                activeThumbColor: AppTheme.primaryGlow,
-                activeTrackColor: AppTheme.primaryShiei.withValues(alpha: 0.4),
-                inactiveThumbColor: isDark ? Colors.white70 : const Color(0xFF94A3B8),
-                inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                onChanged: _toggleKeepBrowserLogin,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 42),
-                    backgroundColor: AppTheme.primaryShiei,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: Icon(
-                    isAndroid ? Icons.account_circle_outlined : Icons.login_rounded,
-                    size: 18,
-                  ),
-                  label: Text(
-                    _browserLoginConnected
-                        ? (isAndroid ? 'Ganti Akun Google' : 'Kelola Akun Browser')
-                        : (isAndroid ? 'Pilih & Hubungkan Google' : 'Hubungkan Akun Browser'),
-                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () => _openBrowserLoginConnect(),
-                ),
-              ),
-              if (_browserLoginConnected) ...[
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(44, 42),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    foregroundColor: AppTheme.dangerRed,
-                    side: BorderSide(color: AppTheme.dangerRed.withValues(alpha: 0.45)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onPressed: _disconnectBrowserLogin,
-                  child: const Icon(Icons.link_off_rounded, size: 18),
                 ),
               ],
-            ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: _openCustomPortalDialog,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              ),
-              child: const Text(
-                'Atau hubungkan portal CBT kustom',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.primaryGlow,
+          if (_keepBrowserLogin) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 42),
+                      backgroundColor: AppTheme.primaryShiei,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: Icon(
+                      isAndroid ? Icons.account_circle_outlined : Icons.login_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _browserLoginConnected
+                          ? (isAndroid ? 'Ganti Akun Google' : 'Kelola Akun Browser')
+                          : (isAndroid ? 'Pilih & Hubungkan Google' : 'Hubungkan Akun Browser'),
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () => _openBrowserLoginConnect(),
+                  ),
+                ),
+                if (_browserLoginConnected) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(44, 42),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      foregroundColor: AppTheme.dangerRed,
+                      side: BorderSide(color: AppTheme.dangerRed.withValues(alpha: 0.45)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: _disconnectBrowserLogin,
+                    child: const Icon(Icons.link_off_rounded, size: 18),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _openCustomPortalDialog,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                ),
+                child: const Text(
+                  'Atau hubungkan portal CBT kustom',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.primaryGlow,
+                  ),
                 ),
               ),
             ),
-          ),
+          ] else ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.accentGreen.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.accentGreen.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.privacy_tip_outlined, color: AppTheme.accentGreen, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Ujian terbuka di WebView Incognito bersih: nol history, nol cache formulir, dan cookie dihapus otomatis.',
+                      style: TextStyle(fontSize: 11, color: textColor, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

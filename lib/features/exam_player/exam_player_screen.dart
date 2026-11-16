@@ -48,6 +48,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
   String _networkType = 'wifi';
   bool _isSubmitting = false;
   bool _isReadyToRenderWebView = false;
+  bool _isGuestBrowserMode = false;
   bool _isHandshakeVerified = false;
   bool _isHandshakeInProgress = true;
   String? _handshakeErrorMessage;
@@ -258,7 +259,8 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
 
     if (ok) {
       final keepBrowserLogin = await TokenStorage.isKeepBrowserLoginEnabled();
-      if (!keepBrowserLogin) {
+      _isGuestBrowserMode = !keepBrowserLogin;
+      if (_isGuestBrowserMode) {
         await UrlExamPlayer.clearBrowserSessionCookies();
       }
       if (!mounted) return;
@@ -1122,6 +1124,7 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
                     : (_isReadyToRenderWebView
                         ? UrlExamPlayer(
                             url: url,
+                            incognito: _isGuestBrowserMode,
                             onPageLoaded: () {
                               if (_isOnPhoneCall) {
                                 _setWebViewBlur(true);
