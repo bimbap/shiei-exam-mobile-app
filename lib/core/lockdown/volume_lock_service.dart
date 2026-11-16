@@ -478,6 +478,28 @@ class VolumeLockService {
     }
   }
 
+  /// Checks whether device Google account / contacts permission (GET_ACCOUNTS on Android) is granted.
+  static Future<bool> hasGoogleAccountsPermission() async {
+    try {
+      final bool granted =
+          await _channel.invokeMethod('hasGoogleAccountsPermission') ?? true;
+      return granted;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Requests device Google account / contacts permission cleanly before fetching accounts.
+  static Future<bool> requestGoogleAccountsPermission() async {
+    try {
+      final bool granted =
+          await _channel.invokeMethod('requestGoogleAccountsPermission') ?? true;
+      return granted;
+    } catch (_) {
+      return true;
+    }
+  }
+
   /// Fetches device Google account emails on Android (requests GET_ACCOUNTS once if needed).
   /// Returns null when unavailable (iOS or permission denied) so callers can fall back cleanly.
   static Future<List<String>?> getDeviceGoogleAccounts() async {

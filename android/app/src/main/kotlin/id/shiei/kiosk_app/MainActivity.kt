@@ -92,6 +92,8 @@ class MainActivity : FlutterActivity() {
     private val reqPickGoogleAccount = 4102
     private var pendingAccountsListResult: MethodChannel.Result? = null
     private val reqGetAccountsPermission = 4103
+    private var pendingAccountsPermissionResult: MethodChannel.Result? = null
+    private val reqGetAccountsPermissionOnly = 4104
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -800,6 +802,32 @@ class MainActivity : FlutterActivity() {
                 "clearClipboard" -> {
                     clearClipboardSilently()
                     result.success(true)
+                }
+
+                "hasGoogleAccountsPermission" -> {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.GET_ACCOUNTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    result.success(hasPermission)
+                }
+
+                "requestGoogleAccountsPermission" -> {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.GET_ACCOUNTS
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasPermission) {
+                        result.success(true)
+                    } else {
+                        pendingAccountsPermissionResult?.success(false)
+                        pendingAccountsPermissionResult = result
+                        ActivityCompat.requestPermissions(
+                            this,
+                            arrayOf(Manifest.permission.GET_ACCOUNTS),
+                            reqGetAccountsPermissionOnly
+                        )
+                    }
                 }
 
                 "getDeviceGoogleAccounts" -> {
@@ -2079,6 +2107,11 @@ class MainActivity : FlutterActivity() {
             } else {
                 pending?.success(null)
             }
+        } else if (requestCode == reqGetAccountsPermissionOnly) {
+            val pending = pendingAccountsPermissionResult
+            pendingAccountsPermissionResult = null
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            pending?.success(granted)
         }
     }
 

@@ -216,6 +216,8 @@ class TokenStorage {
   static const String _keyBrowserLoginEmail = 'shiei_browser_login_email';
   static const String _keyBrowserLoginUrl = 'shiei_browser_login_url';
   static const String _keyBrowserLoginUpdatedAt = 'shiei_browser_login_updated_at';
+  static const String _keySavedBrowserEmails = 'shiei_saved_browser_emails';
+  static const String _keyHiddenDeviceEmails = 'shiei_hidden_device_emails';
 
   static Future<void> saveThemeMode(String mode) async {
     await _storage.write(key: _keyThemeMode, value: mode);
@@ -264,6 +266,9 @@ class TokenStorage {
     }
     if (email != null && email.trim().isNotEmpty) {
       await _storage.write(key: _keyBrowserLoginEmail, value: email.trim());
+      if (connected) {
+        await addSavedBrowserEmail(email.trim());
+      }
     }
     if (url != null && url.trim().isNotEmpty) {
       await _storage.write(key: _keyBrowserLoginUrl, value: url.trim());
@@ -297,6 +302,73 @@ class TokenStorage {
     await _storage.delete(key: _keyBrowserLoginEmail);
     await _storage.delete(key: _keyBrowserLoginUrl);
     await _storage.delete(key: _keyBrowserLoginUpdatedAt);
+  }
+
+  static Future<List<String>> _readEmailList(String key) async {
+    final raw = await _storage.read(key: key);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e?.toString().trim().toLowerCase() ?? '')
+            .where((e) => e.isNotEmpty)
+            .toSet()
+            .toList();
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  static Future<void> _writeEmailList(String key, List<String> emails) async {
+    final cleaned = emails
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet()
+        .toList();
+    await _storage.write(key: key, value: jsonEncode(cleaned));
+  }
+
+  static Future<List<String>> getSavedBrowserEmails() async {
+    return _readEmailList(_keySavedBrowserEmails);
+  }
+
+  static Future<void> addSavedBrowserEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final current = await getSavedBrowserEmails();
+    current.removeWhere((e) => e == normalized);
+    current.insert(0, normalized);
+    await _writeEmailList(_keySavedBrowserEmails, current);
+
+    // Unhide if previously hidden by the user
+    final hidden = await getHiddenDeviceGoogleEmails();
+    if (hidden.contains(normalized)) {
+      hidden.removeWhere((e) => e == normalized);
+      await _writeEmailList(_keyHiddenDeviceEmails, hidden);
+    }
+  }
+
+  static Future<void> removeSavedBrowserEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final current = await getSavedBrowserEmails();
+    current.removeWhere((e) => e == normalized);
+    await _writeEmailList(_keySavedBrowserEmails, current);
+  }
+
+  static Future<List<String>> getHiddenDeviceGoogleEmails() async {
+    return _readEmailList(_keyHiddenDeviceEmails);
+  }
+
+  static Future<void> hideDeviceGoogleEmail(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return;
+    final hidden = await getHiddenDeviceGoogleEmails();
+    if (!hidden.contains(normalized)) {
+      hidden.add(normalized);
+      await _writeEmailList(_keyHiddenDeviceEmails, hidden);
+    }
   }
 
   static Future<bool> isSessionExpired({int maxDays = 3}) async {

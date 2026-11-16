@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../config/routes.dart';
 import '../../core/auth/token_storage.dart';
+import '../../core/lockdown/volume_lock_service.dart';
 import '../../core/notifications/exam_reminder_service.dart';
 import '../../core/theme/theme_controller.dart';
 import '../../core/update/app_update_service.dart';
@@ -22,6 +23,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   bool _isNotificationGranted = false;
   bool _canInstallPackages = false;
+  bool _hasContactsPermission = false;
   bool _keepBrowserLogin = false;
   bool _browserLoginConnected = false;
   String? _browserLoginEmail;
@@ -31,16 +33,23 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkPermissions();
-    _loadBrowserModeState();
+    _loadBrowserModeState(forceGuestIfUnconnected: true);
   }
 
-  Future<void> _loadBrowserModeState() async {
+  Future<void> _loadBrowserModeState({
+    bool forceGuestIfUnconnected = false,
+  }) async {
     final keep = await TokenStorage.isKeepBrowserLoginEnabled();
     final meta = await TokenStorage.getBrowserLoginMeta();
+    final connected = meta['connected'] == true;
+    final effectiveKeep = forceGuestIfUnconnected ? (keep && connected) : keep;
+    if (forceGuestIfUnconnected && !effectiveKeep && keep) {
+      await TokenStorage.setKeepBrowserLoginEnabled(false);
+    }
     if (!mounted) return;
     setState(() {
-      _keepBrowserLogin = keep;
-      _browserLoginConnected = meta['connected'] == true;
+      _keepBrowserLogin = effectiveKeep;
+      _browserLoginConnected = connected;
       _browserLoginEmail = meta['email']?.toString();
     });
   }
@@ -60,23 +69,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     }
   }
 
+  Future<void> _requestAccountsPermission() async {
+    final granted = await VolumeLockService.requestGoogleAccountsPermission();
+    if (!mounted) return;
+    setState(() => _hasContactsPermission = granted);
+  }
+
   Future<void> _connectGoogleDuringOnboarding() async {
-    String? pickedEmail;
-    if (Platform.isAndroid) {
-      pickedEmail = await BrowserAccountPickerSheet.pick(
-        context,
-        currentEmail: _browserLoginEmail,
-      );
-      if (pickedEmail == null || pickedEmail.isEmpty) return;
-      if (_browserLoginEmail != null &&
-          _browserLoginEmail!.toLowerCase() != pickedEmail.toLowerCase()) {
-        await UrlExamPlayer.clearBrowserSessionCookies();
-      }
+    if (Platform.isAndroid && !_hasContactsPermission) {
+      final granted = await VolumeLockService.requestGoogleAccountsPermission();
+      if (!mounted) return;
+      setState(() => _hasContactsPermission = granted);
+    }
+
+    String? targetUrl;
+    String? pickedEmail = await BrowserAccountPickerSheet.pick(
+      context,
+      currentEmail: _browserLoginEmail,
+    );
+    await _loadBrowserModeState();
+    if (pickedEmail == null || pickedEmail.isEmpty) return;
+
+    if (pickedEmail == BrowserAccountPickerSheet.addAccountSentinel) {
+      targetUrl =
+          'https://accounts.google.com/AddSession?continue=https%3A%2F%2Fdocs.google.com%2Fforms';
+      pickedEmail = null;
     }
     if (!mounted) return;
     await Navigator.of(context).pushNamed(
       AppRoutes.browserConnect,
       arguments: <String, dynamic>{
+        if (targetUrl != null) 'initialUrl': targetUrl,
         if (pickedEmail != null) 'prefillEmail': pickedEmail,
         'providerLabel': 'Akun Google',
       },
@@ -101,10 +124,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   Future<void> _checkPermissions() async {
     final notifGranted = await ExamReminderService.isPermissionGranted();
     final installGranted = await AppUpdateService.instance.canRequestPackageInstalls();
+    final contactsGranted = Platform.isAndroid
+        ? await VolumeLockService.hasGoogleAccountsPermission()
+        : true;
     if (mounted) {
       setState(() {
         _isNotificationGranted = notifGranted;
         _canInstallPackages = installGranted;
+        _hasContactsPermission = contactsGranted;
       });
     }
   }
@@ -155,7 +182,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   void _onNext() async {
     if (!_canProceed) return;
-    if (_currentIndex < 5) {
+    if (_currentIndex < 6) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeOutCubic,
@@ -178,7 +205,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) {
-    final bool isLast = _currentIndex == 5;
+    final bool isLast = _currentIndex == 6;
     final isDark = AppTheme.isDark(context);
     final bg = AppTheme.background(context);
     final skipColor = isDark ? AppTheme.textSecondary : const Color(0xFF64748B);
@@ -228,7 +255,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               ),
             ),
 
-            // Middle: Swipeable Carousel Content (6 Slides)
+            // Middle: Swipeable Carousel Content (7 Slides)
             Expanded(
               child: PageView(
                 controller: _pageController,
@@ -242,6 +269,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                   _buildSlideThemeSelector(isDark),
                   _buildSlide2Notification(isDark),
                   _buildSlide3AppInstall(isDark),
+                  _buildSlide4ContactsPermission(isDark),
                   _buildSlideBrowserModeSelector(isDark),
                   _buildSlide4Rules(isDark),
                 ],
@@ -253,11 +281,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
               child: Column(
                 children: [
-                  // Animated Dots Indicator (6 dots)
+                  // Animated Dots Indicator (7 dots)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(
-                      6,
+                      7,
                       (idx) => AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -727,7 +755,94 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     );
   }
 
-  // --- SLIDE 5: BROWSER SESSION MODE (CONNECTED VS GUEST INCOGNITO) ---
+  // --- SLIDE 5: CONTACTS / GOOGLE ACCOUNT LIST PERMISSION ---
+  Widget _buildSlide4ContactsPermission(bool isDark) {
+    final descColor = isDark ? AppTheme.textSecondary : const Color(0xFF475569);
+    return _buildSlideContainer(
+      isDark: isDark,
+      tag: 'IZIN AKUN & KONTAK',
+      title: 'Akses Daftar Akun Perangkat',
+      description:
+          'Digunakan hanya untuk membaca daftar email Google yang ada di perangkat saat memilih Mode Akun Terhubung. Opsional jika Anda memakai Mode Guest (Incognito).',
+      imageAsset: 'assets/images/shiei_mascot_contacts.jpg',
+      extraContent: Container(
+        margin: const EdgeInsets.only(top: 18),
+        child: _hasContactsPermission
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.accentGreen.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: AppTheme.accentGreen,
+                      size: 18,
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      'Izin Akses Akun Sudah Aktif',
+                      style: TextStyle(
+                        color: AppTheme.accentGreen,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _requestAccountsPermission,
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9),
+                      foregroundColor: AppTheme.primaryGlow,
+                      side: const BorderSide(
+                        color: AppTheme.primaryShiei,
+                        width: 1.5,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
+                    icon: const Icon(Icons.contacts_rounded, size: 18),
+                    label: const Text(
+                      'Izinkan Akses Akun & Kontak',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Bisa langsung tekan Lanjutkan bila hanya menggunakan Mode Guest',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: descColor.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  // --- SLIDE 6: BROWSER SESSION MODE (CONNECTED VS GUEST INCOGNITO) ---
   Widget _buildSlideBrowserModeSelector(bool isDark) {
     final titleColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final descColor = isDark ? AppTheme.textSecondary : const Color(0xFF475569);
@@ -854,12 +969,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                           onPressed: _connectGoogleDuringOnboarding,
                           style: TextButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                           ),
                           icon: const Icon(Icons.login_rounded, size: 15),
                           label: Text(
-                            _browserLoginConnected ? 'Ganti Akun' : 'Hubungkan Sekarang',
-                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                            _browserLoginConnected
+                                ? 'Ganti Akun'
+                                : 'Hubungkan Sekarang',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         )
                       : null,

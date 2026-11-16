@@ -383,18 +383,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? customUrl,
     String? providerLabel,
   }) async {
+    String? targetUrl = customUrl;
     String? pickedEmail;
-    if (customUrl == null && Platform.isAndroid) {
+    if (customUrl == null) {
+      if (Platform.isAndroid &&
+          !(await VolumeLockService.hasGoogleAccountsPermission())) {
+        await VolumeLockService.requestGoogleAccountsPermission();
+      }
+      if (!mounted) return;
       pickedEmail = await BrowserAccountPickerSheet.pick(
         context,
         currentEmail: _browserLoginEmail,
       );
+      await _loadInfo();
       if (pickedEmail == null || pickedEmail.isEmpty) {
         return;
       }
-      if (_browserLoginEmail != null &&
-          _browserLoginEmail!.toLowerCase() != pickedEmail.toLowerCase()) {
-        await UrlExamPlayer.clearBrowserSessionCookies();
+      if (pickedEmail == BrowserAccountPickerSheet.addAccountSentinel) {
+        targetUrl =
+            'https://accounts.google.com/AddSession?continue=https%3A%2F%2Fdocs.google.com%2Fforms';
+        pickedEmail = null;
       }
     }
 
@@ -412,11 +420,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final result = await Navigator.of(context).pushNamed(
       AppRoutes.browserConnect,
       arguments: <String, dynamic>{
-        if (customUrl != null) 'initialUrl': customUrl,
+        if (targetUrl != null) 'initialUrl': targetUrl,
         if (pickedEmail != null) 'prefillEmail': pickedEmail,
         if (providerLabel != null)
           'providerLabel': providerLabel
-        else if (pickedEmail != null)
+        else if (customUrl == null)
           'providerLabel': 'Akun Google',
       },
     );
@@ -506,7 +514,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? _browserLoginEmail!
             : (_browserLoginLabel ?? 'akun ini');
 
-    final confirmed = await showDialog<bool>(
+    final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
@@ -539,9 +547,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
         content: Text(
-          'Sesi login dan cookie untuk $accountDisplay akan dihapus dari peramban ujian.\n\nSetelah diputuskan, Anda bisa menghubungkan akun lain atau beralih ke Mode Guest (Incognito).',
+          'Status koneksi untuk $accountDisplay akan diputuskan.\n\n• "Putuskan" menjaga email tetap di daftar cepat & cookie tidak langsung dibuang (tidak perlu ketik ulang kata sandi saat menyambung kembali).\n• "Putuskan & Hapus Cookie" membersihkan seluruh sesi web sekarang juga.',
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: 12.2,
             height: 1.45,
             color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
           ),
@@ -549,20 +557,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Batal'),
+          ),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.dangerRed,
+              side: BorderSide(color: AppTheme.dangerRed.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, 'purge'),
+            child: const Text(
+              'Hapus Cookie',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.dangerRed,
+              backgroundColor: AppTheme.primaryShiei,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(ctx, 'disconnect'),
             child: const Text(
-              'Ya, Putuskan',
+              'Putuskan',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -570,13 +592,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
-    if (confirmed == true) {
-      await _disconnectBrowserLogin();
+    if (action != null) {
+      await _disconnectBrowserLogin(clearCookies: action == 'purge');
     }
   }
 
-  Future<void> _disconnectBrowserLogin() async {
-    await UrlExamPlayer.clearBrowserSessionCookies();
+  Future<void> _disconnectBrowserLogin({bool clearCookies = false}) async {
+    if (clearCookies) {
+      await UrlExamPlayer.clearBrowserSessionCookies();
+    }
     await TokenStorage.clearBrowserLoginMeta();
     if (!mounted) return;
     setState(() {
@@ -588,8 +612,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     AppNotification.showSuccess(
       context,
-      'Koneksi Akun Diputuskan',
-      subtitle: 'Cookie dihapus. Silakan pilih hubungkan akun lain atau Mode Guest.',
+      clearCookies ? 'Koneksi & Cookie Dihapus' : 'Koneksi Akun Diputuskan',
+      subtitle: clearCookies
+          ? 'Sesi web dibersihkan total. Pilih akun baru atau Mode Guest.'
+          : 'Akun dilepas sementara. Email & sesi tersimpan agar bisa disambungkan ulang dengan cepat.',
     );
   }
 

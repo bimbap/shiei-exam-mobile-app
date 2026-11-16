@@ -9,6 +9,7 @@ import 'package:shiei_kiosk/features/exam_player/widgets/exam_announcement_banne
 import 'package:shiei_kiosk/features/onboarding/onboarding_screen.dart';
 import 'package:shiei_kiosk/features/settings/legal_document_screen.dart';
 import 'package:shiei_kiosk/features/settings/settings_screen.dart';
+import 'package:shiei_kiosk/features/settings/widgets/browser_account_picker_sheet.dart';
 import 'package:shiei_kiosk/shared/theme/app_theme.dart';
 
 void main() {
@@ -28,6 +29,10 @@ void main() {
         case 'getDeviceUniqueId':
           return 'TEST-HW-SERIAL-001';
         case 'setFlagSecure':
+          return true;
+        case 'hasGoogleAccountsPermission':
+          return true;
+        case 'requestGoogleAccountsPermission':
           return true;
         default:
           return null;
@@ -128,8 +133,9 @@ void main() {
             label: 'U${i + 1}',
             title: 'Ujian ${i + 1}',
             subject: 'MAT',
-            statusText: i == 3 ? 'Selesai • 1 Peringatan' : 'Tertib • 0 Peringatan',
-            value: i == 3 ? 64.0 : 100.0,
+            statusText: i == 3 ? 'Selesai | 1 Peringatan' : 'Tertib | 0 Peringatan',
+            durationSummary: i == 3 ? '38m / 60m' : '54m / 60m',
+            value: i == 3 ? 64.0 : 90.0,
             color: i == 3 ? const Color(0xFFF59E0B) : AppTheme.accentGreen,
             rawItem: const {},
           ),
@@ -256,6 +262,104 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 300));
         expect(find.byType(PageView), findsOneWidget);
+      },
+    );
+
+    test('TokenStorage manages saved and hidden browser emails consistently', () async {
+      await TokenStorage.saveBrowserLoginMeta(
+        connected: true,
+        email: 'Budi@Gmail.com',
+      );
+      expect(await TokenStorage.getSavedBrowserEmails(), ['budi@gmail.com']);
+
+      await TokenStorage.addSavedBrowserEmail('siti@gmail.com');
+      expect(
+        await TokenStorage.getSavedBrowserEmails(),
+        ['siti@gmail.com', 'budi@gmail.com'],
+      );
+
+      await TokenStorage.removeSavedBrowserEmail('budi@gmail.com');
+      await TokenStorage.hideDeviceGoogleEmail('budi@gmail.com');
+      expect(await TokenStorage.getSavedBrowserEmails(), ['siti@gmail.com']);
+      expect(await TokenStorage.getHiddenDeviceGoogleEmails(), ['budi@gmail.com']);
+
+      // Re-connecting removes email from hidden list cleanly
+      await TokenStorage.saveBrowserLoginMeta(
+        connected: true,
+        email: 'budi@gmail.com',
+      );
+      expect(await TokenStorage.getHiddenDeviceGoogleEmails(), isEmpty);
+      expect(
+        await TokenStorage.getSavedBrowserEmails(),
+        ['budi@gmail.com', 'siti@gmail.com'],
+      );
+    });
+
+    testWidgets(
+      'BrowserAccountPickerSheet allows deleting saved accounts and returns add sentinel without OS dialog',
+      (tester) async {
+        await TokenStorage.addSavedBrowserEmail('siswa.one@gmail.com');
+        await TokenStorage.saveBrowserLoginMeta(
+          connected: true,
+          email: 'siswa.two@gmail.com',
+        );
+
+        String? picked;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      picked = await BrowserAccountPickerSheet.pick(
+                        context,
+                        currentEmail: 'siswa.two@gmail.com',
+                      );
+                    },
+                    child: const Text('Buka Picker'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('Buka Picker'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('siswa.one@gmail.com'), findsOneWidget);
+        expect(find.text('siswa.two@gmail.com'), findsOneWidget);
+        expect(find.text('Masuk dengan Akun Google Lain'), findsOneWidget);
+
+        // Delete active/first account using delete button
+        await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
+        await tester.pumpAndSettle();
+        expect(find.text('siswa.two@gmail.com'), findsNothing);
+        expect((await TokenStorage.getBrowserLoginMeta())['connected'], false);
+
+        // Tap "Masuk dengan Akun Google Lain"
+        await tester.tap(find.text('Masuk dengan Akun Google Lain'));
+        await tester.pumpAndSettle();
+        expect(picked, BrowserAccountPickerSheet.addAccountSentinel);
+      },
+    );
+
+    testWidgets(
+      'OnboardingScreen forces Guest/Incognito default if keep=1 without connected account',
+      (tester) async {
+        await TokenStorage.setKeepBrowserLoginEnabled(true);
+        expect(await TokenStorage.isKeepBrowserLoginEnabled(), true);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const OnboardingScreen(),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(await TokenStorage.isKeepBrowserLoginEnabled(), false);
       },
     );
   });

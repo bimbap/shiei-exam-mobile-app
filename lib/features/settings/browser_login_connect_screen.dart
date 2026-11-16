@@ -47,10 +47,15 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
 
   static String _buildGoogleLoginUrl({String? prefillEmail}) {
     final email = (prefillEmail ?? '').trim();
-    return Uri.https('accounts.google.com', '/ServiceLogin', {
+    if (email.isNotEmpty) {
+      return Uri.https('accounts.google.com', '/AccountChooser', {
+        'continue': 'https://docs.google.com/forms',
+        'Email': email,
+        'login_hint': email,
+      }).toString();
+    }
+    return Uri.https('accounts.google.com', '/AddSession', {
       'continue': 'https://docs.google.com/forms',
-      if (email.isNotEmpty) 'Email': email,
-      if (email.isNotEmpty) 'login_hint': email,
     }).toString();
   }
 
@@ -154,6 +159,8 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
           lowerUrl.contains('accounts.google.com') &&
           (lowerUrl.contains('servicelogin') ||
               lowerUrl.contains('signin') ||
+              lowerUrl.contains('addsession') ||
+              lowerUrl.contains('accountchooser') ||
               lowerUrl.contains('challenge'));
       final landedOnGoogleService =
           lowerUrl.contains('docs.google.com') ||
@@ -183,15 +190,46 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
     }
   }
 
+  Future<String?> _extractSignedInGoogleEmail() async {
+    final controller = _webController;
+    if (controller == null || !_isGoogleFlow) return null;
+    try {
+      final res = await controller.evaluateJavascript(source: '''
+        (function() {
+          try {
+            var nodes = document.querySelectorAll('[data-email], [aria-label*="@"], a[href*="SignOutOptions"]');
+            for (var i = 0; i < nodes.length; i++) {
+              var val = (nodes[i].getAttribute('data-email') || nodes[i].getAttribute('aria-label') || nodes[i].innerText || '');
+              var m = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);
+              if (m) return m[0];
+            }
+            var body = document.body ? (document.body.innerText || '') : '';
+            var bm = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);
+            return bm ? bm[0] : null;
+          } catch(e) { return null; }
+        })();
+      ''');
+      final candidate = res?.toString().trim();
+      if (candidate != null && candidate.contains('@') && !candidate.contains('null')) {
+        return candidate;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _completeAndClose([String? sourceUrl]) async {
     if (_hasCompleted) return;
     _hasCompleted = true;
     final urlToSave = sourceUrl ?? _currentUrl;
+    String? resolvedEmail = widget.prefillEmail?.trim();
+    if (resolvedEmail == null || resolvedEmail.isEmpty) {
+      resolvedEmail = await _extractSignedInGoogleEmail();
+    }
     await TokenStorage.setKeepBrowserLoginEnabled(true);
     await TokenStorage.saveBrowserLoginMeta(
       connected: true,
       label: _resolveLabel(urlToSave),
-      email: widget.prefillEmail,
+      email: resolvedEmail,
       url: urlToSave,
     );
     if (mounted) {

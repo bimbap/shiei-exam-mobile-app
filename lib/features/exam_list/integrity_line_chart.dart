@@ -7,6 +7,7 @@ class IntegrityChartPoint {
   final String title;
   final String subject;
   final String statusText;
+  final String durationSummary;
   final double value; // 0..100
   final Color color;
   final Map<String, dynamic> rawItem;
@@ -16,6 +17,7 @@ class IntegrityChartPoint {
     required this.title,
     required this.subject,
     required this.statusText,
+    this.durationSummary = '',
     required this.value,
     required this.color,
     required this.rawItem,
@@ -85,7 +87,7 @@ class IntegrityLineChart extends StatelessWidget {
                   _handlePointer(d.localPosition, constraints.maxWidth),
               child: SizedBox(
                 width: double.infinity,
-                height: 176,
+                height: 188,
                 child: CustomPaint(
                   painter: _IntegrityLineChartPainter(
                     points: points,
@@ -331,48 +333,81 @@ class _IntegrityLineChartPainter extends CustomPainter {
       ),
     );
 
-    // Top floating callout pill near crosshair X
-    final calloutLabel = '${selPoint.label} • ${selPoint.value.round()}%';
-    final calloutTp = TextPainter(
+    // Floating two-line tooltip card (no icon, '|' separator) near crosshair
+    final headerParts = <String>[
+      selPoint.label,
+      if (selPoint.durationSummary.isNotEmpty) selPoint.durationSummary,
+      '${selPoint.value.round()}%',
+    ];
+    final tooltipHeader = headerParts.join(' | ');
+    final headerTp = TextPainter(
       text: TextSpan(
-        text: calloutLabel,
+        text: tooltipHeader,
         style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontSize: 10.2,
+          fontWeight: FontWeight.w800,
           color: isDark ? Colors.white : const Color(0xFF0F172A),
         ),
       ),
       textDirection: TextDirection.ltr,
-    )..layout();
-    const hPad = 8.0;
-    final boxW = calloutTp.width + hPad * 2;
-    const boxH = 19.0;
-    final double boxX = (selCoord.dx - boxW / 2).clamp(
-      plotLeft,
-      math.max(plotLeft, plotRight - boxW),
-    ).toDouble();
-    const boxY = 5.0;
+      maxLines: 1,
+    )..layout(maxWidth: math.max(120.0, plotWidth - 20));
+
+    final statusTp = TextPainter(
+      text: TextSpan(
+        text: selPoint.statusText,
+        style: TextStyle(
+          fontSize: 9.3,
+          fontWeight: FontWeight.w600,
+          color: selPoint.color,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: math.max(120.0, plotWidth - 20));
+
+    const hPad = 9.0;
+    const vPad = 6.0;
+    const lineGap = 2.0;
+    final contentW = math.max(headerTp.width, statusTp.width);
+    final double boxW = (contentW + hPad * 2)
+        .clamp(64.0, math.max(64.0, plotWidth - 4))
+        .toDouble();
+    final boxH = vPad * 2 + headerTp.height + lineGap + statusTp.height;
+
+    final double boxX = (selCoord.dx - boxW / 2)
+        .clamp(plotLeft + 2, math.max(plotLeft + 2, plotRight - boxW - 2))
+        .toDouble();
+    final double aboveY = selCoord.dy - boxH - 11;
+    final double belowY = selCoord.dy + 11;
+    final double boxY = aboveY >= 6.0
+        ? aboveY
+        : belowY.clamp(6.0, math.max(6.0, plotBottom - boxH - 4)).toDouble();
+
     final calloutRRect = RRect.fromRectAndRadius(
       Rect.fromLTWH(boxX, boxY, boxW, boxH),
-      const Radius.circular(6),
+      const Radius.circular(8),
+    );
+    canvas.drawRRect(
+      calloutRRect.shift(const Offset(0, 2)),
+      Paint()..color = Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
     );
     canvas.drawRRect(
       calloutRRect,
       Paint()
-        ..color = isDark
-            ? const Color(0xFF1E293B)
-            : Colors.white,
+        ..color = isDark ? const Color(0xFF162033) : Colors.white,
     );
     canvas.drawRRect(
       calloutRRect,
       Paint()
         ..color = selPoint.color.withValues(alpha: 0.55)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..strokeWidth = 1.1,
     );
-    calloutTp.paint(
+    headerTp.paint(canvas, Offset(boxX + hPad, boxY + vPad));
+    statusTp.paint(
       canvas,
-      Offset(boxX + hPad, boxY + (boxH - calloutTp.height) / 2),
+      Offset(boxX + hPad, boxY + vPad + headerTp.height + lineGap),
     );
   }
 

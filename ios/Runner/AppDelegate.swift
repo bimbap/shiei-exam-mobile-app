@@ -133,6 +133,9 @@ import UserNotifications
         UIPasteboard.general.items = []
         result(true)
 
+      case "hasGoogleAccountsPermission", "requestGoogleAccountsPermission":
+        result(true)
+
       case "getDeviceGoogleAccounts", "pickDeviceGoogleAccount":
         // iOS does not expose OS accounts without paid Sign in with Apple entitlement; fall back to clean web auth sheet.
         result(nil)

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -4035,21 +4036,40 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
     double resolveIntegrityScore(Map<String, dynamic> item) {
       final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
-      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
-      final violationLogs = (item['violation_logs'] as List?) ?? const [];
       final isLocked = item['is_locked'] == true ||
           rawStatus == 'locked' ||
           rawStatus == 'terminated' ||
           rawStatus == 'exited';
-      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
       final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
       final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+      final link = item['link'] is Map ? item['link'] as Map : const {};
+      final durMin = ((item['duration_minutes'] ??
+              link['duration_minutes'] ??
+              link['duration']) as num?)
+          ?.toInt() ??
+          60;
 
-      if (isLocked) return 22.0;
-      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 100.0;
-      if (isCompleted) return (78.0 - (violationsCount * 14.0)).clamp(35.0, 78.0);
       if (isEnded && elapsedSec <= 0) return 10.0;
-      return 65.0;
+      if (elapsedSec <= 0) return isLocked ? 18.0 : 50.0;
+      final totalSec = math.max(60, durMin * 60);
+      final pct = ((elapsedSec / totalSec) * 100.0).clamp(12.0, 100.0);
+      if (isLocked) return pct.clamp(12.0, 65.0);
+      return pct;
+    }
+
+    String resolveDurationSummary(Map<String, dynamic> item) {
+      final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
+      final link = item['link'] is Map ? item['link'] as Map : const {};
+      final durMin = ((item['duration_minutes'] ??
+              link['duration_minutes'] ??
+              link['duration']) as num?)
+          ?.toInt();
+      if (elapsedSec <= 0) return '0m';
+      final elapsedMin = math.max(1, (elapsedSec / 60).round());
+      if (durMin != null && durMin > 0) {
+        return '${elapsedMin}m / ${durMin}m';
+      }
+      return '${elapsedMin}m';
     }
 
     String resolveBarStatusText(Map<String, dynamic> item) {
@@ -4064,9 +4084,9 @@ class _ExamListScreenState extends State<ExamListScreen> {
       final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
       final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
 
-      if (isLocked) return 'Terkunci ($violationsCount pelanggaran)';
-      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 'Tertib • 0 Peringatan';
-      if (isCompleted) return 'Selesai • $violationsCount Peringatan';
+      if (isLocked) return 'Terkunci | $violationsCount pelanggaran';
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 'Tertib | 0 Peringatan';
+      if (isCompleted) return 'Selesai | $violationsCount Peringatan';
       if (isEnded && elapsedSec <= 0) return 'Tidak Dikerjakan';
       return 'Sedang Berlangsung';
     }
@@ -4083,6 +4103,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
         title: barLink['title']?.toString() ?? 'Ujian Digital',
         subject: rawSubject.isNotEmpty ? rawSubject : 'Umum',
         statusText: resolveBarStatusText(barItem),
+        durationSummary: resolveDurationSummary(barItem),
         value: resolveIntegrityScore(barItem),
         color: resolveBarColor(barItem),
         rawItem: barItem,
@@ -4129,7 +4150,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Geser atau ketuk titik grafik untuk cek detail ujian',
+                      'Efisiensi durasi fokus & kedisiplinan — ketuk/geser grafik',
                       style: TextStyle(fontSize: 11, color: subColor),
                     ),
                   ],
@@ -4236,7 +4257,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '$selSubject • $selTitle',
+                          '$selSubject | $selTitle',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: titleColor),
