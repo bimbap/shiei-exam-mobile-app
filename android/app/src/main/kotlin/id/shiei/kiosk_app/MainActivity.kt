@@ -1,5 +1,7 @@
 package id.shiei.kiosk_app
 
+import android.accounts.AccountManager
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.NotificationManager
@@ -82,6 +84,8 @@ class MainActivity : FlutterActivity() {
     private var screenshotObserver: ContentObserver? = null
     private var lastScreenshotTimestamp = 0L
     private var lastVolumeDownTime = 0L
+    private var pendingAccountResult: MethodChannel.Result? = null
+    private val reqPickGoogleAccount = 4102
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -785,6 +789,41 @@ class MainActivity : FlutterActivity() {
                 "wasRecentScreenshotKey" -> {
                     val isRecent = (System.currentTimeMillis() - lastVolumeDownTime) < 1500L
                     result.success(isRecent)
+                }
+
+                "pickDeviceGoogleAccount" -> {
+                    try {
+                        pendingAccountResult?.success(null)
+                        pendingAccountResult = result
+                        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            AccountManager.newChooseAccountIntent(
+                                null,
+                                null,
+                                arrayOf("com.google"),
+                                null,
+                                null,
+                                null,
+                                null
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            AccountManager.newChooseAccountIntent(
+                                null,
+                                null,
+                                arrayOf("com.google"),
+                                true,
+                                null,
+                                null,
+                                null,
+                                null
+                            )
+                        }
+                        @Suppress("DEPRECATION")
+                        startActivityForResult(intent, reqPickGoogleAccount)
+                    } catch (e: Exception) {
+                        pendingAccountResult = null
+                        result.success(null)
+                    }
                 }
 
                 "openBrowserUrl" -> {
@@ -1966,6 +2005,24 @@ class MainActivity : FlutterActivity() {
             "signatureHash" to sigHash,
             "isDebug" to isDebug
         )
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == reqPickGoogleAccount) {
+            val pending = pendingAccountResult
+            pendingAccountResult = null
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                val email = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
+                val type = data.getStringExtra(AccountManager.KEY_ACCOUNT_TYPE)
+                if (!email.isNullOrBlank()) {
+                    pending?.success(mapOf("email" to email, "type" to (type ?: "com.google")))
+                    return
+                }
+            }
+            pending?.success(null)
+        }
     }
 
     override fun onDestroy() {

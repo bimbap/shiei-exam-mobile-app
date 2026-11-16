@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -46,6 +47,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _keepBrowserLogin = true;
   bool _browserLoginConnected = false;
   String? _browserLoginLabel;
+  String? _browserLoginEmail;
   String? _browserLoginUrl;
 
   @override
@@ -96,6 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _keepBrowserLogin = keepBrowserLogin;
         _browserLoginConnected = browserMeta['connected'] == true;
         _browserLoginLabel = browserMeta['label']?.toString();
+        _browserLoginEmail = browserMeta['email']?.toString();
         _browserLoginUrl = browserMeta['url']?.toString();
       });
     }
@@ -353,6 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _browserLoginConnected = false;
           _browserLoginLabel = null;
+          _browserLoginEmail = null;
           _browserLoginUrl = null;
         });
       }
@@ -363,25 +367,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context,
         title: val ? 'Sesi Login Browser Dipertahankan' : 'Mode Bersih Browser Diaktifkan',
         subtitle: val
-            ? 'Login Google / CBT yang tersambung akan otomatis aktif di lembar ujian.'
+            ? 'Login akun web yang tersambung akan otomatis aktif di lembar ujian.'
             : 'Cookie & login web direset setiap kali sesi ujian dimulai atau berakhir.',
         type: val ? NotificationType.success : NotificationType.info,
       );
     }
   }
 
-  Future<void> _openBrowserLoginConnect() async {
+  Future<void> _openBrowserLoginConnect({
+    String? customUrl,
+    String? providerLabel,
+  }) async {
+    String? pickedEmail;
+    if (customUrl == null && Platform.isAndroid) {
+      pickedEmail = await VolumeLockService.pickDeviceGoogleAccount();
+      if (pickedEmail == null || pickedEmail.isEmpty) {
+        return;
+      }
+      if (_browserLoginEmail != null &&
+          _browserLoginEmail!.toLowerCase() != pickedEmail.toLowerCase()) {
+        await UrlExamPlayer.clearBrowserSessionCookies();
+      }
+    }
+
+    if (!mounted) return;
     final result = await Navigator.of(context).pushNamed(
       AppRoutes.browserConnect,
-      arguments: _browserLoginUrl,
+      arguments: <String, dynamic>{
+        if (customUrl != null) 'initialUrl': customUrl,
+        if (pickedEmail != null) 'prefillEmail': pickedEmail,
+        if (providerLabel != null)
+          'providerLabel': providerLabel
+        else if (pickedEmail != null)
+          'providerLabel': 'Akun Google',
+      },
     );
     await _loadInfo();
     if (result == true && mounted) {
+      final accountDisplay = _browserLoginEmail ?? _browserLoginLabel ?? 'Akun Browser';
       AppNotification.showSuccess(
         context,
-        'Login Browser Tersambung',
-        subtitle: 'Sesi ${_browserLoginLabel ?? 'browser'} siap dipakai saat membuka ujian.',
+        'Akun Browser Terhubung',
+        subtitle: 'Sesi $accountDisplay aktif dan siap dipakai saat membuka ujian.',
       );
+    }
+  }
+
+  Future<void> _openCustomPortalDialog() async {
+    final ctrl = TextEditingController(
+      text: (_browserLoginUrl != null &&
+              !_browserLoginUrl!.contains('google.com'))
+          ? _browserLoginUrl
+          : '',
+    );
+    final isDark = AppTheme.isDark(context);
+    final target = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Hubungkan Portal CBT',
+          style: TextStyle(
+            fontSize: 15.5,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : const Color(0xFF0F172A),
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Masukkan alamat web portal sekolah (HTTPS atau IP LAN) untuk menyimpan sesi login sebelum ujian:',
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                hintText: 'https://cbt.sekolah.sch.id',
+                prefixIcon: Icon(Icons.link_rounded, size: 18),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryShiei,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Lanjutkan'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (target != null && target.isNotEmpty) {
+      await _openBrowserLoginConnect(customUrl: target);
     }
   }
 
@@ -392,6 +485,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _browserLoginConnected = false;
       _browserLoginLabel = null;
+      _browserLoginEmail = null;
       _browserLoginUrl = null;
     });
     AppNotification.showSuccess(
@@ -409,13 +503,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Color textColor,
     Color dividerColor,
   ) {
+    final isAndroid = Platform.isAndroid;
     final statusColor = _browserLoginConnected
         ? AppTheme.accentGreen
         : (_keepBrowserLogin ? AppTheme.primaryGlow : const Color(0xFFF59E0B));
 
+    final accountTitle = _browserLoginConnected
+        ? (_browserLoginEmail?.isNotEmpty == true
+            ? _browserLoginEmail!
+            : (_browserLoginLabel ?? 'Akun Browser Terhubung'))
+        : (isAndroid ? 'Akun Google Perangkat' : 'Akun Browser / Portal Ujian');
+
     final statusText = _browserLoginConnected
-        ? 'Terhubung (${_browserLoginLabel ?? 'Browser'})'
-        : (_keepBrowserLogin ? 'Siap Disambungkan' : 'Reset Tiap Ujian');
+        ? 'Terhubung (${_browserLoginLabel ?? 'Sesi Aktif'})'
+        : (_keepBrowserLogin
+            ? (isAndroid
+                ? 'Deteksi otomatis akun Google di HP Anda'
+                : 'Masuk sebelum ujian agar sesi tersimpan')
+            : 'Mode bersih aktif (cookie direset tiap ujian)');
+
+    final avatarInitial = (_browserLoginConnected &&
+            _browserLoginEmail != null &&
+            _browserLoginEmail!.isNotEmpty)
+        ? _browserLoginEmail!.substring(0, 1).toUpperCase()
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -430,14 +541,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: statusColor.withValues(alpha: 0.4)),
                 ),
-                child: Icon(Icons.public_rounded, color: statusColor, size: 22),
+                child: Center(
+                  child: avatarInitial != null
+                      ? Text(
+                          avatarInitial,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: statusColor,
+                          ),
+                        )
+                      : Icon(
+                          isAndroid
+                              ? Icons.account_circle_rounded
+                              : Icons.verified_user_rounded,
+                          color: statusColor,
+                          size: 22,
+                        ),
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -445,7 +573,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Connect Login for Browser',
+                      accountTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.bold,
@@ -455,6 +585,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       statusText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
@@ -465,11 +597,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Masuk terlebih dahulu ke akun Google Forms atau portal CBT sekolah sebelum ujian dimulai agar tidak perlu login ulang di mode kiosk.',
-            style: TextStyle(fontSize: 11.5, color: textColor, height: 1.4),
           ),
           Divider(color: dividerColor, height: 22),
           Row(
@@ -489,8 +616,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 2),
                     Text(
                       _keepBrowserLogin
-                          ? 'Simpan cookie & autentikasi web antar sesi ujian'
-                          : 'Hapus cookie web secara otomatis saat ujian dimulai & selesai',
+                          ? 'Login Google / CBT otomatis terbawa saat mode kiosk'
+                          : 'Cookie web dihapus otomatis tiap ujian dimulai & selesai',
                       style: TextStyle(fontSize: 11, color: textColor),
                     ),
                   ],
@@ -517,12 +644,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  icon: const Icon(Icons.login_rounded, size: 17),
+                  icon: Icon(
+                    isAndroid ? Icons.account_circle_outlined : Icons.login_rounded,
+                    size: 18,
+                  ),
                   label: Text(
-                    _browserLoginConnected ? 'Kelola Akun Browser' : 'Hubungkan Akun Browser',
+                    _browserLoginConnected
+                        ? (isAndroid ? 'Ganti Akun Google' : 'Kelola Akun Browser')
+                        : (isAndroid ? 'Pilih & Hubungkan Google' : 'Hubungkan Akun Browser'),
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
                   ),
-                  onPressed: _openBrowserLoginConnect,
+                  onPressed: () => _openBrowserLoginConnect(),
                 ),
               ),
               if (_browserLoginConnected) ...[
@@ -540,6 +672,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ],
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _openCustomPortalDialog,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              ),
+              child: const Text(
+                'Atau hubungkan portal CBT kustom',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.primaryGlow,
+                ),
+              ),
+            ),
           ),
         ],
       ),

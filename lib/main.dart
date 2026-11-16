@@ -119,9 +119,23 @@ class ShieiExamApp extends StatelessWidget {
               case AppRoutes.settings:
                 return MaterialPageRoute(builder: (_) => const SettingsScreen());
               case AppRoutes.browserConnect:
-                final initialUrl = settings.arguments as String?;
+                String? initialUrl;
+                String? prefillEmail;
+                String? providerLabel;
+                final rawArgs = settings.arguments;
+                if (rawArgs is String) {
+                  initialUrl = rawArgs;
+                } else if (rawArgs is Map) {
+                  initialUrl = rawArgs['initialUrl']?.toString();
+                  prefillEmail = rawArgs['prefillEmail']?.toString();
+                  providerLabel = rawArgs['providerLabel']?.toString();
+                }
                 return MaterialPageRoute<bool>(
-                  builder: (_) => BrowserLoginConnectScreen(initialUrl: initialUrl),
+                  builder: (_) => BrowserLoginConnectScreen(
+                    initialUrl: initialUrl,
+                    prefillEmail: prefillEmail,
+                    providerLabel: providerLabel,
+                  ),
                 );
               case AppRoutes.changelog:
                 return MaterialPageRoute(builder: (_) => const ChangelogScreen());

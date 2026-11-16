@@ -467,6 +467,21 @@ class VolumeLockService {
     }
   }
 
+  /// Prompts the user to pick an existing Google account on Android via system AccountManager picker.
+  /// Returns the selected account email on Android, or null if cancelled / unavailable (including iOS).
+  static Future<String?> pickDeviceGoogleAccount() async {
+    try {
+      final dynamic res = await _channel.invokeMethod('pickDeviceGoogleAccount');
+      if (res is Map) {
+        final email = res['email']?.toString().trim();
+        if (email != null && email.isNotEmpty) return email;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /**
    * Opens an HTTPS/HTTP/mailto URI via external device browser or email client.
    */

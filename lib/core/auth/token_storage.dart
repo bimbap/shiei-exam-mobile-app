@@ -213,6 +213,7 @@ class TokenStorage {
   static const String _keyKeepBrowserLogin = 'shiei_keep_browser_login';
   static const String _keyBrowserLoginConnected = 'shiei_browser_login_connected';
   static const String _keyBrowserLoginLabel = 'shiei_browser_login_label';
+  static const String _keyBrowserLoginEmail = 'shiei_browser_login_email';
   static const String _keyBrowserLoginUrl = 'shiei_browser_login_url';
   static const String _keyBrowserLoginUpdatedAt = 'shiei_browser_login_updated_at';
 
@@ -254,11 +255,15 @@ class TokenStorage {
   static Future<void> saveBrowserLoginMeta({
     required bool connected,
     String? label,
+    String? email,
     String? url,
   }) async {
     await _storage.write(key: _keyBrowserLoginConnected, value: connected ? '1' : '0');
     if (label != null && label.trim().isNotEmpty) {
       await _storage.write(key: _keyBrowserLoginLabel, value: label.trim());
+    }
+    if (email != null && email.trim().isNotEmpty) {
+      await _storage.write(key: _keyBrowserLoginEmail, value: email.trim());
     }
     if (url != null && url.trim().isNotEmpty) {
       await _storage.write(key: _keyBrowserLoginUrl, value: url.trim());
@@ -274,11 +279,13 @@ class TokenStorage {
   static Future<Map<String, dynamic>> getBrowserLoginMeta() async {
     final connected = (await _storage.read(key: _keyBrowserLoginConnected)) == '1';
     final label = await _storage.read(key: _keyBrowserLoginLabel);
+    final email = await _storage.read(key: _keyBrowserLoginEmail);
     final url = await _storage.read(key: _keyBrowserLoginUrl);
     final updatedAt = await _storage.read(key: _keyBrowserLoginUpdatedAt);
     return {
       'connected': connected,
       'label': label,
+      'email': email,
       'url': url,
       'updatedAt': updatedAt,
     };
@@ -287,6 +294,7 @@ class TokenStorage {
   static Future<void> clearBrowserLoginMeta() async {
     await _storage.delete(key: _keyBrowserLoginConnected);
     await _storage.delete(key: _keyBrowserLoginLabel);
+    await _storage.delete(key: _keyBrowserLoginEmail);
     await _storage.delete(key: _keyBrowserLoginUrl);
     await _storage.delete(key: _keyBrowserLoginUpdatedAt);
   }

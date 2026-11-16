@@ -47,6 +47,11 @@ void main() {
           return false;
         case 'verifyAppSignature':
           return 'A1B2C3D4E5';
+        case 'pickDeviceGoogleAccount':
+          return {
+            'email': 'student@school.sch.id',
+            'type': 'com.google',
+          };
         case 'checkSecurityIntegrity':
           return {
             'isRooted': false,
@@ -160,6 +165,12 @@ void main() {
     expect(integrity['isSignatureValid'], true);
     expect(integrity['signatureHash'], 'A1B2C3D4E5');
     expect(integrity['isDebug'], true);
+  });
+
+  test('VolumeLockService pickDeviceGoogleAccount extracts email from native channel', () async {
+    final email = await VolumeLockService.pickDeviceGoogleAccount();
+    expect(email, 'student@school.sch.id');
+    expect(log.any((call) => call.method == 'pickDeviceGoogleAccount'), true);
   });
 
   test('LockdownService stopExamMonitoring handles stopAlarm flag without errors', () {
