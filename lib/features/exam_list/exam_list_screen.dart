@@ -2586,6 +2586,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                                             : ((!effectiveLocked && violationLogs.length == 1 && unlockedByName != null && unlockedByName.isNotEmpty)
                                                 ? unlockedByName
                                                 : null);
+                                        final logUnlockedAt = log['unlocked_at'] != null ? formatDate(log['unlocked_at']) : null;
 
                                         return Container(
                                           padding: const EdgeInsets.all(12),

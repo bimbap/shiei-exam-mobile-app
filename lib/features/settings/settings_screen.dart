@@ -13,6 +13,8 @@ import '../../core/theme/theme_controller.dart';
 import '../../core/update/app_update_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/app_notification.dart';
+import '../exam_player/url_exam_player.dart';
+import 'legal_document_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -40,6 +42,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoadingLicense = false;
   bool _showFullLicenseKey = false;
 
+  // Browser Login Connection State
+  bool _keepBrowserLogin = true;
+  bool _browserLoginConnected = false;
+  String? _browserLoginLabel;
+  String? _browserLoginUrl;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +62,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isSec = await TokenStorage.isScreenshotProtectionEnabled();
     final isExitBypass = await TokenStorage.isAppExitBypassEnabled();
     final isAlarmBypass = await TokenStorage.isAntiAlarmBypassEnabled();
+    final keepBrowserLogin = await TokenStorage.isKeepBrowserLoginEnabled();
+    final browserMeta = await TokenStorage.getBrowserLoginMeta();
 
     // Determine admin role status and school context
     final token = await TokenStorage.getToken();
@@ -83,6 +93,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _isLoggedIn = isLoggedIn;
         _isAdmin = isAdmin;
         _schoolData = school;
+        _keepBrowserLogin = keepBrowserLogin;
+        _browserLoginConnected = browserMeta['connected'] == true;
+        _browserLoginLabel = browserMeta['label']?.toString();
+        _browserLoginUrl = browserMeta['url']?.toString();
       });
     }
 
@@ -329,6 +343,209 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _toggleKeepBrowserLogin(bool val) async {
+    setState(() => _keepBrowserLogin = val);
+    await TokenStorage.setKeepBrowserLoginEnabled(val);
+    if (!val) {
+      await UrlExamPlayer.clearBrowserSessionCookies();
+      await TokenStorage.clearBrowserLoginMeta();
+      if (mounted) {
+        setState(() {
+          _browserLoginConnected = false;
+          _browserLoginLabel = null;
+          _browserLoginUrl = null;
+        });
+      }
+    }
+    await VolumeLockService.setFlagSecure(false);
+    if (mounted) {
+      AppNotification.show(
+        context,
+        title: val ? 'Sesi Login Browser Dipertahankan' : 'Mode Bersih Browser Diaktifkan',
+        subtitle: val
+            ? 'Login Google / CBT yang tersambung akan otomatis aktif di lembar ujian.'
+            : 'Cookie & login web direset setiap kali sesi ujian dimulai atau berakhir.',
+        type: val ? NotificationType.success : NotificationType.info,
+      );
+    }
+  }
+
+  Future<void> _openBrowserLoginConnect() async {
+    final result = await Navigator.of(context).pushNamed(
+      AppRoutes.browserConnect,
+      arguments: _browserLoginUrl,
+    );
+    await _loadInfo();
+    if (result == true && mounted) {
+      AppNotification.showSuccess(
+        context,
+        'Login Browser Tersambung',
+        subtitle: 'Sesi ${_browserLoginLabel ?? 'browser'} siap dipakai saat membuka ujian.',
+      );
+    }
+  }
+
+  Future<void> _disconnectBrowserLogin() async {
+    await UrlExamPlayer.clearBrowserSessionCookies();
+    await TokenStorage.clearBrowserLoginMeta();
+    if (!mounted) return;
+    setState(() {
+      _browserLoginConnected = false;
+      _browserLoginLabel = null;
+      _browserLoginUrl = null;
+    });
+    AppNotification.showSuccess(
+      context,
+      'Sesi Browser Diputuskan',
+      subtitle: 'Semua cookie & akun browser di perangkat ini telah dihapus.',
+    );
+  }
+
+  Widget _buildBrowserLoginCard(
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color titleColor,
+    Color textColor,
+    Color dividerColor,
+  ) {
+    final statusColor = _browserLoginConnected
+        ? AppTheme.accentGreen
+        : (_keepBrowserLogin ? AppTheme.primaryGlow : const Color(0xFFF59E0B));
+
+    final statusText = _browserLoginConnected
+        ? 'Terhubung (${_browserLoginLabel ?? 'Browser'})'
+        : (_keepBrowserLogin ? 'Siap Disambungkan' : 'Reset Tiap Ujian');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                ),
+                child: Icon(Icons.public_rounded, color: statusColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Connect Login for Browser',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Masuk terlebih dahulu ke akun Google Forms atau portal CBT sekolah sebelum ujian dimulai agar tidak perlu login ulang di mode kiosk.',
+            style: TextStyle(fontSize: 11.5, color: textColor, height: 1.4),
+          ),
+          Divider(color: dividerColor, height: 22),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pertahankan Sesi Login Browser',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _keepBrowserLogin
+                          ? 'Simpan cookie & autentikasi web antar sesi ujian'
+                          : 'Hapus cookie web secara otomatis saat ujian dimulai & selesai',
+                      style: TextStyle(fontSize: 11, color: textColor),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _keepBrowserLogin,
+                activeThumbColor: AppTheme.primaryGlow,
+                activeTrackColor: AppTheme.primaryShiei.withValues(alpha: 0.4),
+                inactiveThumbColor: isDark ? Colors.white70 : const Color(0xFF94A3B8),
+                inactiveTrackColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                onChanged: _toggleKeepBrowserLogin,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 42),
+                    backgroundColor: AppTheme.primaryShiei,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.login_rounded, size: 17),
+                  label: Text(
+                    _browserLoginConnected ? 'Kelola Akun Browser' : 'Hubungkan Akun Browser',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _openBrowserLoginConnect,
+                ),
+              ),
+              if (_browserLoginConnected) ...[
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(44, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    foregroundColor: AppTheme.dangerRed,
+                    side: BorderSide(color: AppTheme.dangerRed.withValues(alpha: 0.45)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _disconnectBrowserLogin,
+                  child: const Icon(Icons.link_off_rounded, size: 18),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = AppTheme.isDark(context);
@@ -415,6 +632,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildAdminLicenseCard(isDark, cardBg, cardBorder, titleColor, textColor, dividerColor),
             const SizedBox(height: 20),
           ],
+
+          // Section 1.8: Connect Login for Browser
+          _buildSectionHeader('KONEKSI LOGIN BROWSER', Icons.public_rounded),
+          _buildBrowserLoginCard(isDark, cardBg, cardBorder, titleColor, textColor, dividerColor),
+          const SizedBox(height: 20),
 
           // Section 2: Hardware & Device Lock
           _buildSectionHeader('INFORMASI PERANGKAT & HARDWARE LOCK', Icons.phonelink_lock_rounded),
@@ -682,7 +904,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Section 3: Tentang Aplikasi
+          // Section 4: Ketentuan Layanan & Kebijakan Privasi
+          _buildSectionHeader('KETENTUAN & PRIVASI', Icons.gavel_rounded),
+          Material(
+            color: cardBg,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: cardBorder),
+            ),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(
+                    Icons.description_outlined,
+                    color: AppTheme.primaryGlow,
+                  ),
+                  title: Text(
+                    'Ketentuan Layanan (ToS)',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: titleColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Perjanjian penggunaan, hardware lock & aturan pengawasan',
+                    style: TextStyle(fontSize: 12, color: textColor),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.textMuted,
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LegalDocumentScreen(
+                        title: 'Ketentuan Layanan (ToS)',
+                        subtitle:
+                            'Perjanjian penggunaan, hardware lock & aturan pengawasan',
+                        effectiveLabel:
+                            'SHIEI Exam Pro · Berlaku efektif 16 Nov 2026',
+                        sections: LegalDocumentScreen.termsSections,
+                        icon: Icons.description_outlined,
+                      ),
+                    ),
+                  ),
+                ),
+                Divider(height: 1, color: dividerColor),
+                ListTile(
+                  leading: const Icon(
+                    Icons.privacy_tip_outlined,
+                    color: AppTheme.accentGreen,
+                  ),
+                  title: Text(
+                    'Kebijakan Privasi',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: titleColor,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Transparansi izin perangkat, server sekolah & proteksi data',
+                    style: TextStyle(fontSize: 12, color: textColor),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppTheme.textMuted,
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LegalDocumentScreen(
+                        title: 'Kebijakan Privasi',
+                        subtitle:
+                            'Transparansi izin perangkat, server sekolah & proteksi data',
+                        effectiveLabel:
+                            'Pembaruan Kebijakan Privasi SHIEI · 16 Nov 2026',
+                        sections: LegalDocumentScreen.privacySections,
+                        icon: Icons.privacy_tip_outlined,
+                        accentColor: AppTheme.accentGreen,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Section 5: Tentang Aplikasi
           _buildSectionHeader('TENTANG APLIKASI', Icons.info_outline_rounded),
           Container(
             padding: const EdgeInsets.all(16),
@@ -766,7 +1076,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Divider(color: dividerColor, height: 22),
                 _buildInfoRow('Versi Rilis Kiosk:', AppUpdateService.fullVersionString, valueColor: AppTheme.primaryGlow, isDark: isDark),
                 const SizedBox(height: 8),
-                _buildInfoRow('Pengembang:', 'bapp Production', isDark: isDark),
+                _buildInfoRow('Pengembang:', 'HexaDev', isDark: isDark),
+                const SizedBox(height: 8),
+                _buildActionInfoRow(
+                  label: 'Email:',
+                  value: 'contact@hexadev.my.id',
+                  icon: Icons.mail_outline_rounded,
+                  isDark: isDark,
+                  onTap: () => _confirmExternalLaunch(
+                    icon: Icons.mail_outline_rounded,
+                    title: 'Buka Aplikasi Email?',
+                    body: 'Anda akan mengirim email ke contact@hexadev.my.id melalui aplikasi email perangkat.',
+                    confirmLabel: 'Buka Email',
+                    targetUrl: 'mailto:contact@hexadev.my.id',
+                    failureMessage: 'Tidak ditemukan aplikasi email terpasang. Hubungi contact@hexadev.my.id secara manual.',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildActionInfoRow(
+                  label: 'Situs:',
+                  value: 'shiei.hexadev.my.id',
+                  icon: Icons.open_in_new_rounded,
+                  isDark: isDark,
+                  onTap: () => _confirmExternalLaunch(
+                    icon: Icons.open_in_browser_rounded,
+                    title: 'Buka Situs Web?',
+                    body: 'Anda akan membuka shiei.hexadev.my.id melalui browser perangkat Anda.',
+                    confirmLabel: 'Buka Browser',
+                    targetUrl: 'https://shiei.hexadev.my.id',
+                  ),
+                ),
               ],
             ),
           ),
@@ -1223,6 +1562,147 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActionInfoRow({
+    required String label,
+    required String value,
+    required IconData icon,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
+              ),
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryGlow,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(icon, size: 13, color: AppTheme.primaryGlow),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmExternalLaunch({
+    required IconData icon,
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required String targetUrl,
+    String? failureMessage,
+  }) {
+    final isDark = AppTheme.isDark(context);
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Batal',
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, _, __) => AlertDialog(
+        backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+            width: 1.2,
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(icon, color: AppTheme.primaryGlow, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          body,
+          style: TextStyle(
+            color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
+            fontSize: 13,
+            height: 1.45,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Batal',
+              style: TextStyle(
+                color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryShiei,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(96, 38),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final ok = await VolumeLockService.openBrowserUrl(targetUrl);
+              if (!ok && mounted && failureMessage != null) {
+                AppNotification.show(
+                  context,
+                  title: 'Tidak Dapat Membuka',
+                  subtitle: failureMessage,
+                  type: NotificationType.info,
+                );
+              }
+            },
+            child: Text(confirmLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+      transitionBuilder: (ctx, anim1, _, child) {
+        final curved = CurvedAnimation(
+          parent: anim1,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

@@ -46,10 +46,9 @@ class ThemeController extends ChangeNotifier {
    * Uses safe brightness resolution to avoid assertion crashes.
    */
   bool isDarkMode(BuildContext context) {
+    final themeBrightness = Theme.of(context).brightness;
     if (_themeMode == ThemeMode.dark) return true;
     if (_themeMode == ThemeMode.light) return false;
-    final brightness = MediaQuery.maybePlatformBrightnessOf(context) ??
-        View.of(context).platformDispatcher.platformBrightness;
-    return brightness == Brightness.dark;
+    return themeBrightness == Brightness.dark;
   }
 }

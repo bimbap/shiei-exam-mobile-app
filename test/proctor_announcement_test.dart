@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shiei_kiosk/features/exam_player/url_exam_player.dart';
 import 'package:shiei_kiosk/features/exam_player/widgets/exam_announcement_banner.dart';
 import 'package:shiei_kiosk/shared/theme/app_theme.dart';
 
@@ -87,6 +88,39 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('PERINGATAN MENDESAK'), findsOneWidget);
+      expect(find.text('KHUSUS ANDA'), findsNothing);
+    });
+
+    testWidgets('renders KHUSUS ANDA badge when target_scope is selected', (WidgetTester tester) async {
+      final personalAnnouncement = {
+        'id': 103,
+        'message': 'Harap periksa kembali biodata NISN Anda.',
+        'type': 'info',
+        'target_scope': 'selected',
+        'proctor': 'Pengawas Ruang 01',
+      };
+
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: ExamAnnouncementBanner(
+            announcement: personalAnnouncement,
+            onDismiss: () {},
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('INFO PENGAWAS'), findsOneWidget);
+      expect(find.text('KHUSUS ANDA'), findsOneWidget);
+    });
+
+    test('UrlExamPlayer exposes clean non-wv user agent and trusts accounts.google.com', () {
+      expect(UrlExamPlayer.browserCompatibleUserAgent.contains('; wv)'), isFalse);
+      expect(
+        UrlExamPlayer.isUrlAllowed('https://accounts.google.com/ServiceLogin', 'https://docs.google.com/forms/d/1'),
+        isTrue,
+      );
     });
   });
 }

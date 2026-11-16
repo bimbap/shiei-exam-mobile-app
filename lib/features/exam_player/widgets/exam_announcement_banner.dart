@@ -97,6 +97,8 @@ class _ExamAnnouncementBannerState extends State<ExamAnnouncementBanner>
     final String type = (widget.announcement['type'] ?? 'warning').toString();
     final String message = (widget.announcement['message'] ?? '').toString();
     final String proctor = (widget.announcement['proctor'] ?? 'Pengawas Ruangan').toString();
+    final bool isPersonalTarget =
+        widget.announcement['target_scope']?.toString() == 'selected';
 
     Color accentColor;
     IconData icon;
@@ -202,6 +204,27 @@ class _ExamAnnouncementBannerState extends State<ExamAnnouncementBanner>
                               ),
                             ),
                             const SizedBox(width: 8),
+                            if (isPersonalTarget) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: const Color(0xFF6366F1).withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'KHUSUS ANDA',
+                                  style: TextStyle(
+                                    color: Color(0xFF6366F1),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
                             Expanded(
                               child: Text(
                                 proctor,

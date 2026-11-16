@@ -8,4 +8,5 @@ class AppRoutes {
   static const String onboarding = '/onboarding';
   static const String settings = '/settings';
   static const String changelog = '/changelog';
+  static const String browserConnect = '/browser-connect';
 }

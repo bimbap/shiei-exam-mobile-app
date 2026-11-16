@@ -1465,13 +1465,21 @@ class TeacherPortalController extends ChangeNotifier {
     }
   }
 
-  Future<String?> sendAnnouncement(int examId, String message, {String type = 'warning'}) async {
+  Future<String?> sendAnnouncement(
+    int examId,
+    String message, {
+    String type = 'warning',
+    String targetScope = 'all',
+    List<int> targetUserIds = const [],
+  }) async {
     try {
       final res = await _api.post(
         ApiEndpoints.schoolExamAnnouncements(examId),
         data: {
           'message': message.trim(),
           'type': type,
+          'target_scope': targetScope,
+          if (targetScope == 'selected') 'target_user_ids': targetUserIds,
         },
       );
       if (res.data != null && (res.data['status'] == 'success' || res.statusCode == 200 || res.statusCode == 201)) {

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -73,6 +74,19 @@ class UrlExamPlayer extends StatefulWidget {
     return isExamHost || isAnchor || isTrustedProvider;
   }
 
+  /// Clean Chrome/Safari mobile User-Agent so Google & SSO providers accept WebView login.
+  static String get browserCompatibleUserAgent => Platform.isIOS
+      ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+      : 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+
+  /// Clears all WebView cookies & web storage when browser login persistence is disabled or reset.
+  static Future<void> clearBrowserSessionCookies() async {
+    try {
+      await CookieManager.instance().deleteAllCookies();
+      await WebStorageManager.instance().deleteAllData();
+    } catch (_) {}
+  }
+
   /// Removes locally cached shiei_autosave_* form drafts after exam completion.
   static Future<void> clearAutosaveStorage(InAppWebViewController? controller) async {
     if (controller == null) return;
@@ -120,6 +134,10 @@ class _UrlExamPlayerState extends State<UrlExamPlayer> {
             supportZoom: false,
             disableContextMenu: true, // Disables text copy/paste selection menu
             clearCache: false,
+            cacheEnabled: true,
+            thirdPartyCookiesEnabled: true,
+            sharedCookiesEnabled: true,
+            userAgent: UrlExamPlayer.browserCompatibleUserAgent,
             hardwareAcceleration: true,
             transparentBackground: false,
             allowsInlineMediaPlayback: true, // Essential for teacher audio listening and video clips

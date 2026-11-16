@@ -36,8 +36,13 @@ class BroadcastAnnouncementDialog extends StatefulWidget {
 
 class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialog> {
   final _messageController = TextEditingController();
+  final _studentSearchController = TextEditingController();
   int? _selectedExamId;
   String _announcementType = 'warning'; // 'info', 'warning', 'urgent'
+  String _targetScope = 'all'; // 'all' | 'selected'
+  final Set<int> _selectedStudentIds = <int>{};
+  List<Map<String, dynamic>> _activeParticipants = [];
+  bool _isLoadingParticipants = false;
   bool _isSending = false;
   bool _isLoadingAnnouncements = false;
   List<Map<String, dynamic>> _activeAnnouncements = [];
@@ -53,13 +58,78 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
   void initState() {
     super.initState();
     _selectedExamId = widget.initialExamId;
-    _loadAnnouncements();
+    _loadExamContext();
   }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _studentSearchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadExamContext() async {
+    await Future.wait([
+      _loadAnnouncements(),
+      _loadParticipants(),
+    ]);
+  }
+
+  static bool _isParticipantActiveInExam(Map<String, dynamic> session) {
+    final status = (session['status'] ?? '').toString().toLowerCase();
+    final score = num.tryParse(session['score']?.toString() ?? '');
+    final isCompleted = status == 'completed' ||
+        status == 'submitted' ||
+        (score != null && score > 0);
+    final isTerminated = status == 'terminated' ||
+        status == 'exited' ||
+        session['lock_reason']?.toString() == 'proctor_kick';
+    if (isCompleted || isTerminated) return false;
+    return status == 'in_progress' ||
+        status == 'split_screen' ||
+        status == 'locked' ||
+        status == 'pending' ||
+        session['is_locked'] == true;
+  }
+
+  static int? _extractParticipantUserId(Map<String, dynamic> session) {
+    final raw = session['user_id'] ?? session['user']?['id'];
+    if (raw == null) return null;
+    return raw is int ? raw : int.tryParse(raw.toString());
+  }
+
+  Future<void> _loadParticipants() async {
+    if (_selectedExamId == null) {
+      if (mounted) {
+        setState(() {
+          _activeParticipants = [];
+          _selectedStudentIds.clear();
+        });
+      }
+      return;
+    }
+    setState(() => _isLoadingParticipants = true);
+    final sessions = await widget.controller.loadExamParticipants(_selectedExamId);
+    final seenIds = <int>{};
+    final activeList = <Map<String, dynamic>>[];
+    for (final s in sessions) {
+      final uid = _extractParticipantUserId(s);
+      if (uid == null || !seenIds.add(uid)) continue;
+      if (!_isParticipantActiveInExam(s)) continue;
+      activeList.add(s);
+    }
+    activeList.sort((a, b) {
+      final nameA = (a['user']?['name'] ?? '').toString().toLowerCase();
+      final nameB = (b['user']?['name'] ?? '').toString().toLowerCase();
+      return nameA.compareTo(nameB);
+    });
+    if (mounted) {
+      setState(() {
+        _activeParticipants = activeList;
+        _selectedStudentIds.removeWhere((id) => !seenIds.contains(id));
+        _isLoadingParticipants = false;
+      });
+    }
   }
 
   Future<void> _loadAnnouncements() async {
@@ -86,12 +156,19 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
       return;
     }
 
+    if (_targetScope == 'selected' && _selectedStudentIds.isEmpty) {
+      AppNotification.showError(context, 'Pilih Murid Tujuan', subtitle: 'Pilih minimal 1 murid yang sedang ujian.');
+      return;
+    }
+
     setState(() => _isSending = true);
 
     final error = await widget.controller.sendAnnouncement(
       _selectedExamId!,
       text,
       type: _announcementType,
+      targetScope: _targetScope,
+      targetUserIds: _targetScope == 'selected' ? _selectedStudentIds.toList() : const [],
     );
 
     if (!mounted) return;
@@ -102,7 +179,9 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
       AppNotification.showSuccess(
         context,
         'Pengumuman Terkirim!',
-        subtitle: 'Pesan telah disiarkan ke seluruh layar ujian siswa.',
+        subtitle: _targetScope == 'selected'
+            ? 'Pesan khusus dikirim ke ${_selectedStudentIds.length} murid terpilih.'
+            : 'Pesan telah disiarkan ke seluruh layar ujian siswa.',
       );
       _loadAnnouncements();
     } else {
@@ -254,11 +333,50 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                   }).toList(),
                 );
                 if (selected != null && selected != _selectedExamId) {
-                  setState(() => _selectedExamId = selected);
-                  _loadAnnouncements();
+                  setState(() {
+                    _selectedExamId = selected;
+                    _selectedStudentIds.clear();
+                    _studentSearchController.clear();
+                  });
+                  _loadExamContext();
                 }
               },
             ),
+            const SizedBox(height: 14),
+
+            // 1.5 Target Recipient Mode (All vs Selected Active Students)
+            Text(
+              'Sasaran Penerima',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isDark ? Colors.white70 : const Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _buildScopeChip(
+                  scope: 'all',
+                  label: 'Semua Peserta',
+                  icon: Icons.groups_rounded,
+                  color: const Color(0xFFF59E0B),
+                  isDark: isDark,
+                ),
+                const SizedBox(width: 8),
+                _buildScopeChip(
+                  scope: 'selected',
+                  label: 'Pilih Murid (${_activeParticipants.length})',
+                  icon: Icons.person_search_rounded,
+                  color: const Color(0xFF6366F1),
+                  isDark: isDark,
+                ),
+              ],
+            ),
+            if (_targetScope == 'selected') ...[
+              const SizedBox(height: 10),
+              _buildSelectedParticipantsBox(isDark),
+            ],
             const SizedBox(height: 14),
 
             // 2. Priority Type Selector
@@ -350,8 +468,11 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
             AnimatedBuilder(
               animation: _messageController,
               builder: (context, _) {
+                final bool hasValidTarget =
+                    _targetScope == 'all' || _selectedStudentIds.isNotEmpty;
                 final bool canSubmit = !_isSending &&
                     _selectedExamId != null &&
+                    hasValidTarget &&
                     _messageController.text.trim().isNotEmpty;
 
                 return SizedBox(
@@ -359,7 +480,9 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                   height: 48,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF59E0B),
+                      backgroundColor: _targetScope == 'selected'
+                          ? const Color(0xFF6366F1)
+                          : const Color(0xFFF59E0B),
                       disabledBackgroundColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
                       foregroundColor: Colors.white,
                       disabledForegroundColor: isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
@@ -374,7 +497,11 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                           )
                         : const Icon(Icons.send_rounded, size: 18),
                     label: Text(
-                      _isSending ? 'Menyiarkan...' : 'Siarkan ke Layar Ujian Siswa',
+                      _isSending
+                          ? 'Menyiarkan...'
+                          : (_targetScope == 'selected'
+                              ? 'Kirim ke ${_selectedStudentIds.length} Murid Terpilih'
+                              : 'Siarkan ke Semua Peserta'),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
                     ),
                     onPressed: canSubmit ? _handleSend : null,
@@ -416,6 +543,8 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                 final msg = ann['message']?.toString() ?? '';
                 final type = ann['type']?.toString() ?? 'info';
                 final proctor = ann['proctor']?.toString() ?? 'Pengawas';
+                final targetLabel = _formatTargetLabel(ann);
+                final isPersonal = ann['target_scope']?.toString() == 'selected';
 
                 Color typeColor;
                 switch (type) {
@@ -455,10 +584,13 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Oleh: $proctor',
+                              '$targetLabel • Oleh: $proctor',
                               style: TextStyle(
                                 fontSize: 10.5,
-                                color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                                fontWeight: isPersonal ? FontWeight.w600 : FontWeight.normal,
+                                color: isPersonal
+                                    ? const Color(0xFF6366F1)
+                                    : (isDark ? AppTheme.textSecondary : const Color(0xFF64748B)),
                               ),
                             ),
                           ],
@@ -478,6 +610,337 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
         ),
       ),
     ),
+    );
+  }
+
+  String _formatTargetLabel(Map<String, dynamic> ann) {
+    if (ann['target_scope']?.toString() != 'selected') {
+      return 'Semua Peserta';
+    }
+    final names = (ann['target_user_names'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .where((s) => s.isNotEmpty)
+            .toList() ??
+        const <String>[];
+    final idsCount = (ann['target_user_ids'] as List<dynamic>?)?.length ?? 0;
+    final count = names.isNotEmpty ? names.length : idsCount;
+    if (names.isNotEmpty) {
+      final preview = names.take(2).join(', ');
+      return names.length > 2
+          ? 'Khusus $count Murid ($preview +${names.length - 2})'
+          : 'Khusus $count Murid ($preview)';
+    }
+    return count > 0 ? 'Khusus $count Murid' : 'Murid Terpilih';
+  }
+
+  Widget _buildScopeChip({
+    required String scope,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+  }) {
+    final isSelected = _targetScope == scope;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          FocusScope.of(context).unfocus();
+          setState(() => _targetScope = scope);
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? color.withValues(alpha: 0.14)
+                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected
+                  ? color
+                  : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected
+                    ? color
+                    : (isDark ? AppTheme.textSecondary : const Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected
+                        ? color
+                        : (isDark ? AppTheme.textSecondary : const Color(0xFF64748B)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedParticipantsBox(bool isDark) {
+    final query = _studentSearchController.text.trim().toLowerCase();
+    final filtered = _activeParticipants.where((s) {
+      if (query.isEmpty) return true;
+      final name = (s['user']?['name'] ?? '').toString().toLowerCase();
+      final nisn = (s['user']?['nisn'] ?? '').toString().toLowerCase();
+      final cls = (s['user']?['class_major']?['name'] ?? '').toString().toLowerCase();
+      return name.contains(query) || nisn.contains(query) || cls.contains(query);
+    }).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Murid Sedang Ujian (${_selectedStudentIds.length} dipilih)',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (filtered.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          for (final s in filtered) {
+                            final uid = _extractParticipantUserId(s);
+                            if (uid != null) _selectedStudentIds.add(uid);
+                          }
+                        });
+                      },
+                      child: const Text(
+                        'Pilih Semua',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF6366F1),
+                        ),
+                      ),
+                    ),
+                  if (_selectedStudentIds.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedStudentIds.clear()),
+                      child: const Text(
+                        'Reset',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFEF4444),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _studentSearchController,
+            onChanged: (_) => setState(() {}),
+            style: TextStyle(
+              fontSize: 12,
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: 'Cari nama, NISN, atau kelas murid...',
+              hintStyle: TextStyle(
+                fontSize: 11.5,
+                color: isDark ? AppTheme.textSecondary : const Color(0xFF94A3B8),
+              ),
+              prefixIcon: const Icon(Icons.search_rounded, size: 17),
+              suffixIcon: _studentSearchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 16),
+                      onPressed: () {
+                        _studentSearchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: isDark ? AppTheme.surfaceDark : Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_isLoadingParticipants)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Center(
+                child: Text(
+                  _activeParticipants.isEmpty
+                      ? 'Belum ada murid yang sedang mengerjakan ujian ini.'
+                      : 'Tidak ada murid aktif yang cocok dengan pencarian.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 175),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 6),
+                itemBuilder: (_, idx) {
+                  final s = filtered[idx];
+                  final uid = _extractParticipantUserId(s);
+                  if (uid == null) return const SizedBox.shrink();
+                  final isChecked = _selectedStudentIds.contains(uid);
+                  final name = (s['user']?['name'] ?? 'Siswa #$uid').toString();
+                  final cls = (s['user']?['class_major']?['name'] ?? '').toString();
+                  final nisn = (s['user']?['nisn'] ?? '').toString();
+                  final isLocked = s['is_locked'] == true ||
+                      s['status']?.toString() == 'locked' ||
+                      s['status']?.toString() == 'split_screen';
+                  final statusLabel = isLocked
+                      ? 'Terkunci'
+                      : (s['status']?.toString() == 'pending' ? 'Menunggu' : 'Sedang Ujian');
+                  final statusColor = isLocked
+                      ? const Color(0xFFEF4444)
+                      : (s['status']?.toString() == 'pending'
+                          ? const Color(0xFFF59E0B)
+                          : AppTheme.accentGreen);
+
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () {
+                      setState(() {
+                        if (isChecked) {
+                          _selectedStudentIds.remove(uid);
+                        } else {
+                          _selectedStudentIds.add(uid);
+                        }
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isChecked
+                            ? const Color(0xFF6366F1).withValues(alpha: 0.1)
+                            : (isDark ? AppTheme.surfaceDark : Colors.white),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isChecked
+                              ? const Color(0xFF6366F1)
+                              : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isChecked ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                            size: 18,
+                            color: isChecked
+                                ? const Color(0xFF6366F1)
+                                : (isDark ? Colors.white54 : const Color(0xFF94A3B8)),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  ),
+                                ),
+                                if (cls.isNotEmpty || nisn.isNotEmpty)
+                                  Text(
+                                    [cls, nisn].where((e) => e.isNotEmpty).join(' • '),
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: isDark ? AppTheme.textSecondary : const Color(0xFF64748B),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: statusColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 

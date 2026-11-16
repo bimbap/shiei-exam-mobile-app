@@ -791,9 +791,10 @@ class MainActivity : FlutterActivity() {
                     val url = call.argument<String>("url")
                     val parsed = if (!url.isNullOrBlank()) android.net.Uri.parse(url.trim()) else null
                     val scheme = parsed?.scheme?.lowercase(Locale.US)
-                    if (parsed != null && (scheme == "https" || scheme == "http")) {
+                    if (parsed != null && (scheme == "https" || scheme == "http" || scheme == "mailto")) {
                         try {
-                            val intent = Intent(Intent.ACTION_VIEW, parsed)
+                            val action = if (scheme == "mailto") Intent.ACTION_SENDTO else Intent.ACTION_VIEW
+                            val intent = Intent(action, parsed)
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             startActivity(intent)
                             result.success(true)

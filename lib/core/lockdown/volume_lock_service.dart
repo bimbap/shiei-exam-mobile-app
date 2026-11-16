@@ -468,6 +468,17 @@ class VolumeLockService {
   }
 
   /**
+   * Opens an HTTPS/HTTP/mailto URI via external device browser or email client.
+   */
+  static Future<bool> openBrowserUrl(String url) async {
+    try {
+      return await _channel.invokeMethod<bool>('openBrowserUrl', {'url': url}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Open Android Display over other apps (Overlay) settings page directly.
    */
   static Future<bool> openOverlaySettings() async {

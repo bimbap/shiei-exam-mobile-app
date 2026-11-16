@@ -242,7 +242,7 @@ import UserNotifications
            let urlString = args["url"] as? String,
            let url = URL(string: urlString),
            let scheme = url.scheme?.lowercased(),
-           (scheme == "https" || scheme == "http") {
+           (scheme == "https" || scheme == "http" || scheme == "mailto") {
           UIApplication.shared.open(url, options: [:]) { success in
             result(success)
           }

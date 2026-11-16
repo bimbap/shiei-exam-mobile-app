@@ -257,6 +257,11 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
     if (!mounted) return;
 
     if (ok) {
+      final keepBrowserLogin = await TokenStorage.isKeepBrowserLoginEnabled();
+      if (!keepBrowserLogin) {
+        await UrlExamPlayer.clearBrowserSessionCookies();
+      }
+      if (!mounted) return;
       setState(() {
         _isHandshakeInProgress = false;
         _isHandshakeVerified = true;
@@ -809,6 +814,9 @@ class _ExamPlayerScreenState extends State<ExamPlayerScreen> {
               _isSubmitting = true;
               _lockdown.stopExamMonitoring();
               await UrlExamPlayer.clearAutosaveStorage(_webViewController);
+              if (!await TokenStorage.isKeepBrowserLoginEnabled()) {
+                await UrlExamPlayer.clearBrowserSessionCookies();
+              }
               await _recordProgress('completed');
               if (mounted) {
                 Navigator.pop(context);

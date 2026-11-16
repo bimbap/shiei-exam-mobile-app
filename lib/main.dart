@@ -16,6 +16,7 @@ import 'features/exam_list/exam_list_screen.dart';
 import 'features/exam_player/exam_player_screen.dart';
 import 'features/lockout/locked_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'features/settings/browser_login_connect_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/teacher_monitor/monitor_screen.dart';
 import 'features/update/app_update_dialog.dart';
@@ -117,6 +118,11 @@ class ShieiExamApp extends StatelessWidget {
                 return MaterialPageRoute(builder: (_) => const OnboardingScreen());
               case AppRoutes.settings:
                 return MaterialPageRoute(builder: (_) => const SettingsScreen());
+              case AppRoutes.browserConnect:
+                final initialUrl = settings.arguments as String?;
+                return MaterialPageRoute<bool>(
+                  builder: (_) => BrowserLoginConnectScreen(initialUrl: initialUrl),
+                );
               case AppRoutes.changelog:
                 return MaterialPageRoute(builder: (_) => const ChangelogScreen());
               default:
@@ -220,37 +226,23 @@ class _SplashScreenState extends State<SplashScreen> {
               height: 92,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                gradient: RadialGradient(
                   colors: [
-                    AppTheme.primaryGlow.withValues(alpha: 0.28),
-                    AppTheme.primaryDark.withValues(alpha: 0.12),
+                    AppTheme.primaryShiei.withValues(alpha: 0.28),
+                    Colors.transparent,
                   ],
                 ),
-                border: Border.all(
-                  color: AppTheme.primaryShiei.withValues(alpha: 0.6),
-                  width: 2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.primaryShiei.withValues(alpha: 0.25),
-                    blurRadius: 32,
-                    spreadRadius: 4,
-                  ),
-                ],
               ),
               child: ClipOval(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Image.asset(
-                    'assets/images/shiei_logo.png',
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.shield_rounded,
-                      size: 46,
-                      color: AppTheme.primaryGlow,
-                    ),
+                child: Image.asset(
+                  'assets/images/shiei_logo.png',
+                  width: 92,
+                  height: 92,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.shield_rounded,
+                    size: 46,
+                    color: AppTheme.primaryGlow,
                   ),
                 ),
               ),

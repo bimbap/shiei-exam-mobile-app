@@ -210,6 +210,11 @@ class TokenStorage {
   static const String _keyThemeMode = 'app_theme_mode';
   static const String _keyAudioFeedback = 'shiei_audio_feedback_enabled';
   static const String _keyFraudAlarm = 'shiei_fraud_alarm_enabled';
+  static const String _keyKeepBrowserLogin = 'shiei_keep_browser_login';
+  static const String _keyBrowserLoginConnected = 'shiei_browser_login_connected';
+  static const String _keyBrowserLoginLabel = 'shiei_browser_login_label';
+  static const String _keyBrowserLoginUrl = 'shiei_browser_login_url';
+  static const String _keyBrowserLoginUpdatedAt = 'shiei_browser_login_updated_at';
 
   static Future<void> saveThemeMode(String mode) async {
     await _storage.write(key: _keyThemeMode, value: mode);
@@ -235,6 +240,55 @@ class TokenStorage {
   static Future<bool> isFraudAlarmEnabled() async {
     final val = await _storage.read(key: _keyFraudAlarm);
     return val != '0'; // default true
+  }
+
+  static Future<void> setKeepBrowserLoginEnabled(bool enabled) async {
+    await _storage.write(key: _keyKeepBrowserLogin, value: enabled ? '1' : '0');
+  }
+
+  static Future<bool> isKeepBrowserLoginEnabled() async {
+    final val = await _storage.read(key: _keyKeepBrowserLogin);
+    return val != '0'; // default true so connected browser accounts persist
+  }
+
+  static Future<void> saveBrowserLoginMeta({
+    required bool connected,
+    String? label,
+    String? url,
+  }) async {
+    await _storage.write(key: _keyBrowserLoginConnected, value: connected ? '1' : '0');
+    if (label != null && label.trim().isNotEmpty) {
+      await _storage.write(key: _keyBrowserLoginLabel, value: label.trim());
+    }
+    if (url != null && url.trim().isNotEmpty) {
+      await _storage.write(key: _keyBrowserLoginUrl, value: url.trim());
+    }
+    if (connected) {
+      await _storage.write(
+        key: _keyBrowserLoginUpdatedAt,
+        value: DateTime.now().toIso8601String(),
+      );
+    }
+  }
+
+  static Future<Map<String, dynamic>> getBrowserLoginMeta() async {
+    final connected = (await _storage.read(key: _keyBrowserLoginConnected)) == '1';
+    final label = await _storage.read(key: _keyBrowserLoginLabel);
+    final url = await _storage.read(key: _keyBrowserLoginUrl);
+    final updatedAt = await _storage.read(key: _keyBrowserLoginUpdatedAt);
+    return {
+      'connected': connected,
+      'label': label,
+      'url': url,
+      'updatedAt': updatedAt,
+    };
+  }
+
+  static Future<void> clearBrowserLoginMeta() async {
+    await _storage.delete(key: _keyBrowserLoginConnected);
+    await _storage.delete(key: _keyBrowserLoginLabel);
+    await _storage.delete(key: _keyBrowserLoginUrl);
+    await _storage.delete(key: _keyBrowserLoginUpdatedAt);
   }
 
   static Future<bool> isSessionExpired({int maxDays = 3}) async {
