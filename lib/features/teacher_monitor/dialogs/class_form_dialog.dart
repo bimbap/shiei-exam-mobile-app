@@ -221,6 +221,15 @@ class _ClassFormDialogState extends State<ClassFormDialog> {
   // --- SECTION 2: TEACHER / WALI KELAS STATE ---
   int? _selectedTeacherId;
 
+  // Initial snapshots for edit dirty-checking
+  late String _initialLevelCategory;
+  late String _initialSelectedLevel;
+  late String _initialCustomLevel;
+  late bool _initialHasMajor;
+  late String _initialMajor;
+  late String _initialSection;
+  int? _initialTeacherId;
+
   @override
   void initState() {
     super.initState();
@@ -254,6 +263,14 @@ class _ClassFormDialogState extends State<ClassFormDialog> {
         }
       }
     }
+    _initialLevelCategory = _levelCategory;
+    _initialSelectedLevel = _selectedLevel;
+    _initialCustomLevel = _customLevelController.text.trim();
+    _initialHasMajor = _hasMajor;
+    _initialMajor = _majorController.text.trim();
+    _initialSection = _sectionController.text.trim();
+    _initialTeacherId = _selectedTeacherId;
+
     _customLevelController.addListener(_onFieldChanged);
     _majorController.addListener(_onFieldChanged);
     _sectionController.addListener(_onFieldChanged);
@@ -332,8 +349,20 @@ class _ClassFormDialogState extends State<ClassFormDialog> {
     return null;
   }
 
+  bool get _hasChanges {
+    if (!isEditing) return true;
+    return _levelCategory != _initialLevelCategory ||
+        _selectedLevel != _initialSelectedLevel ||
+        _customLevelController.text.trim() != _initialCustomLevel ||
+        _hasMajor != _initialHasMajor ||
+        _majorController.text.trim() != _initialMajor ||
+        _sectionController.text.trim() != _initialSection ||
+        _selectedTeacherId != _initialTeacherId;
+  }
+
   bool get _isFormValid {
     if (_isSubmitting) return false;
+    if (isEditing && !_hasChanges) return false;
     final computed = _computedClassName().trim();
     if (computed.length < 2) return false;
 

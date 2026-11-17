@@ -259,6 +259,7 @@ class TokenStorage {
     String? label,
     String? email,
     String? url,
+    bool clearEmailIfMissing = false,
   }) async {
     await _storage.write(key: _keyBrowserLoginConnected, value: connected ? '1' : '0');
     if (label != null && label.trim().isNotEmpty) {
@@ -269,6 +270,8 @@ class TokenStorage {
       if (connected) {
         await addSavedBrowserEmail(email.trim());
       }
+    } else if (clearEmailIfMissing) {
+      await _storage.delete(key: _keyBrowserLoginEmail);
     }
     if (url != null && url.trim().isNotEmpty) {
       await _storage.write(key: _keyBrowserLoginUrl, value: url.trim());

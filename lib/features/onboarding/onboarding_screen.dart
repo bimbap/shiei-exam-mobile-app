@@ -88,6 +88,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       setState(() => _hasContactsPermission = granted);
     }
 
+    final previousEmail = _browserLoginEmail;
     String? targetUrl;
     String? pickedEmail = await BrowserAccountPickerSheet.pick(
       context,
@@ -107,6 +108,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       arguments: <String, dynamic>{
         if (targetUrl != null) 'initialUrl': targetUrl,
         if (pickedEmail != null) 'prefillEmail': pickedEmail,
+        if (previousEmail != null && previousEmail.isNotEmpty)
+          'previousEmail': previousEmail,
         'providerLabel': 'Akun Google',
       },
     );

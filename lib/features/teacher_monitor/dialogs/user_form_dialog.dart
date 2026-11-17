@@ -91,6 +91,15 @@ class _UserFormDialogState extends State<UserFormDialog> {
   int? _cachedTeacherClassId;
   String _cachedAdminNip = '';
 
+  // Initial field snapshots to detect actual changes during Edit mode
+  late String _initialName;
+  late String _initialEmail;
+  late String _initialNip;
+  late String _initialNisn;
+  late String _initialRole;
+  String? _initialSubRole;
+  int? _initialClassId;
+
   bool get isEditing => widget.userData != null;
 
   bool get canChangeRole {
@@ -174,7 +183,17 @@ class _UserFormDialogState extends State<UserFormDialog> {
       }
     }
 
+    _initialName = _nameController.text.trim();
+    _initialEmail = _emailController.text.trim();
+    _initialNip = _nipController.text.trim();
+    _initialNisn = _nisnController.text.trim();
+    _initialRole = _role;
+    _initialSubRole = _subRole;
+    _initialClassId = _selectedClassId;
+
     _nameController.addListener(_onFieldChanged);
+    _emailController.addListener(_onFieldChanged);
+    _nipController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
     _nisnController.addListener(_onFieldChanged);
   }
@@ -183,7 +202,29 @@ class _UserFormDialogState extends State<UserFormDialog> {
     if (mounted) setState(() {});
   }
 
+  bool get _hasChanges {
+    if (!isEditing) return true;
+    if (_nameController.text.trim() != _initialName) return true;
+    if (_role != _initialRole) return true;
+    if (_passwordController.text.trim().isNotEmpty) return true;
+    if (_selectedClassId != _initialClassId) return true;
+    if (_role == 'student') {
+      if (_nisnController.text.trim() != _initialNisn) return true;
+      if (_resetDevice) return true;
+    } else {
+      if (_emailController.text.trim() != _initialEmail) return true;
+      if (_nipController.text.trim() != _initialNip) return true;
+      if (_role == 'teacher' &&
+          (_subRole ?? 'guru') != (_initialSubRole ?? 'guru')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool get _isFormValid {
+    if (isEditing && !_hasChanges) return false;
+
     // 1. Nama Lengkap is required (min 3 chars)
     if (_nameController.text.trim().length < 3) return false;
 
@@ -203,6 +244,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
   @override
   void dispose() {
     _nameController.removeListener(_onFieldChanged);
+    _emailController.removeListener(_onFieldChanged);
+    _nipController.removeListener(_onFieldChanged);
     _passwordController.removeListener(_onFieldChanged);
     _nisnController.removeListener(_onFieldChanged);
     _nameController.dispose();

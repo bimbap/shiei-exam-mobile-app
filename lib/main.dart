@@ -123,6 +123,7 @@ class ShieiExamApp extends StatelessWidget {
                 String? initialUrl;
                 String? prefillEmail;
                 String? providerLabel;
+                String? previousEmail;
                 final rawArgs = settings.arguments;
                 if (rawArgs is String) {
                   initialUrl = rawArgs;
@@ -130,12 +131,14 @@ class ShieiExamApp extends StatelessWidget {
                   initialUrl = rawArgs['initialUrl']?.toString();
                   prefillEmail = rawArgs['prefillEmail']?.toString();
                   providerLabel = rawArgs['providerLabel']?.toString();
+                  previousEmail = rawArgs['previousEmail']?.toString();
                 }
                 return MaterialPageRoute<bool>(
                   builder: (_) => BrowserLoginConnectScreen(
                     initialUrl: initialUrl,
                     prefillEmail: prefillEmail,
                     providerLabel: providerLabel,
+                    previousEmail: previousEmail,
                   ),
                 );
               case AppRoutes.changelog:

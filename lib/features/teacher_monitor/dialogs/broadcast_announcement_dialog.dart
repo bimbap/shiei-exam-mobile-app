@@ -154,6 +154,12 @@ class _BroadcastAnnouncementDialogState extends State<BroadcastAnnouncementDialo
     final seenIds = <int>{};
     final activeList = <Map<String, dynamic>>[];
     for (final s in sessions) {
+      final participantRole = s['user']?['role']?.toString().trim().toLowerCase();
+      if (participantRole == 'teacher' ||
+          participantRole == 'school_admin' ||
+          participantRole == 'super_admin') {
+        continue;
+      }
       final uid = _extractParticipantUserId(s);
       if (uid == null || !seenIds.add(uid)) continue;
       if (!_isParticipantWorkingInExam(s, examEnded: examEnded)) continue;

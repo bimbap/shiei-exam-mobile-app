@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -64,6 +65,18 @@ class _ExamFormDialogState extends State<ExamFormDialog> with TickerProviderStat
   bool _isActive = true;
   bool _isSubmitting = false;
   String? _errorMessage;
+
+  // Initial snapshots for edit dirty-checking
+  late String _initialTitle;
+  late String _initialSubject;
+  late String _initialUrl;
+  late String _initialToken;
+  late String _initialTokenMode;
+  late DateTime _initialDate;
+  late TimeOfDay _initialStartTime;
+  late TimeOfDay _initialEndTime;
+  late Set<int> _initialClassIds;
+  late bool _initialIsActive;
 
   bool get isEditing => widget.exam != null;
 
@@ -146,7 +159,19 @@ class _ExamFormDialogState extends State<ExamFormDialog> with TickerProviderStat
       }
     });
 
+    _initialTitle = _titleController.text.trim();
+    _initialSubject = _subjectController.text.trim();
+    _initialUrl = _urlController.text.trim();
+    _initialToken = _tokenController.text.trim();
+    _initialTokenMode = _tokenMode;
+    _initialDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    _initialStartTime = _startTime;
+    _initialEndTime = _endTime;
+    _initialClassIds = _selectedClassIds.toSet();
+    _initialIsActive = _isActive;
+
     _titleController.addListener(_onFieldChanged);
+    _subjectController.addListener(_onFieldChanged);
     _urlController.addListener(_onFieldChanged);
     _tokenController.addListener(_onFieldChanged);
   }
@@ -155,7 +180,34 @@ class _ExamFormDialogState extends State<ExamFormDialog> with TickerProviderStat
     if (mounted) setState(() {});
   }
 
+  bool get _hasChanges {
+    if (!isEditing) return true;
+    if (_titleController.text.trim() != _initialTitle) return true;
+    if (_subjectController.text.trim() != _initialSubject) return true;
+    if (_urlController.text.trim() != _initialUrl) return true;
+    if (_tokenMode != _initialTokenMode) return true;
+    if (_tokenMode != 'none' &&
+        _tokenController.text.trim() != _initialToken) {
+      return true;
+    }
+    if (_selectedDate.year != _initialDate.year ||
+        _selectedDate.month != _initialDate.month ||
+        _selectedDate.day != _initialDate.day) {
+      return true;
+    }
+    if (_startTime.hour != _initialStartTime.hour ||
+        _startTime.minute != _initialStartTime.minute ||
+        _endTime.hour != _initialEndTime.hour ||
+        _endTime.minute != _initialEndTime.minute) {
+      return true;
+    }
+    if (_isActive != _initialIsActive) return true;
+    if (!setEquals(_selectedClassIds.toSet(), _initialClassIds)) return true;
+    return false;
+  }
+
   bool get _isFormValid {
+    if (isEditing && !_hasChanges) return false;
     // 1. Judul Ujian * (min 3 chars)
     if (_titleController.text.trim().length < 3) return false;
     // 2. Link Soal / URL CBT * (valid URL)
@@ -169,6 +221,7 @@ class _ExamFormDialogState extends State<ExamFormDialog> with TickerProviderStat
   @override
   void dispose() {
     _titleController.removeListener(_onFieldChanged);
+    _subjectController.removeListener(_onFieldChanged);
     _urlController.removeListener(_onFieldChanged);
     _tokenController.removeListener(_onFieldChanged);
     _titleController.dispose();

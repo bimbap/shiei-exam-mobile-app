@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:shiei_kiosk/config/app_config.dart';
 import 'package:shiei_kiosk/core/auth/token_storage.dart';
+import 'package:shiei_kiosk/features/auth/login_screen.dart';
 import 'package:shiei_kiosk/features/exam_list/integrity_line_chart.dart';
 import 'package:shiei_kiosk/features/exam_player/url_exam_player.dart';
 import 'package:shiei_kiosk/features/exam_player/widgets/exam_announcement_banner.dart';
@@ -10,6 +13,11 @@ import 'package:shiei_kiosk/features/onboarding/onboarding_screen.dart';
 import 'package:shiei_kiosk/features/settings/legal_document_screen.dart';
 import 'package:shiei_kiosk/features/settings/settings_screen.dart';
 import 'package:shiei_kiosk/features/settings/widgets/browser_account_picker_sheet.dart';
+import 'package:shiei_kiosk/features/teacher_monitor/dialogs/class_form_dialog.dart';
+import 'package:shiei_kiosk/features/teacher_monitor/dialogs/exam_form_dialog.dart';
+import 'package:shiei_kiosk/features/teacher_monitor/dialogs/user_form_dialog.dart';
+import 'package:shiei_kiosk/features/teacher_monitor/tabs/school_data_tab.dart';
+import 'package:shiei_kiosk/features/teacher_monitor/teacher_portal_controller.dart';
 import 'package:shiei_kiosk/shared/theme/app_theme.dart';
 
 void main() {
@@ -425,4 +433,390 @@ void main() {
       },
     );
   });
+
+  group('App-Wide Bug Fix Regressions', () {
+    test(
+      'TokenStorage clears stale browser email when switching/adding without email extraction',
+      () async {
+        await TokenStorage.saveBrowserLoginMeta(
+          connected: true,
+          email: 'old.account@gmail.com',
+        );
+        expect(
+          (await TokenStorage.getBrowserLoginMeta())['email'],
+          'old.account@gmail.com',
+        );
+
+        await TokenStorage.saveBrowserLoginMeta(
+          connected: true,
+          email: null,
+          clearEmailIfMissing: true,
+        );
+        final updated = await TokenStorage.getBrowserLoginMeta();
+        expect(updated['connected'], true);
+        expect(updated['email'], isNull);
+      },
+    );
+
+    testWidgets(
+      'Non-admin teacher cannot multi-select Teacher cards in SchoolDataTab',
+      (tester) async {
+        final ctrl = _FakeTeacherPortalController(
+          fakeRole: 'teacher',
+          fakeCurrentUser: {
+            'id': 99,
+            'name': 'Pak Budi',
+            'role': 'teacher',
+            'class_major_id': 1,
+          },
+          fakeClasses: [
+            {'id': 1, 'name': 'X RPL 1'},
+            {'id': 2, 'name': 'X RPL 2'},
+          ],
+          fakeTeachers: [
+            {
+              'id': 50,
+              'name': 'Bu Siti',
+              'email': 'siti@sekolah.id',
+              'role': 'teacher',
+              'sub_role': 'guru',
+            },
+          ],
+          fakeStudents: [
+            {
+              'id': 201,
+              'name': 'Siswa Kelas Sendiri',
+              'nisn': '11111',
+              'role': 'student',
+              'class_major_id': 1,
+            },
+            {
+              'id': 202,
+              'name': 'Siswa Kelas Lain',
+              'nisn': '22222',
+              'role': 'student',
+              'class_major_id': 2,
+            },
+          ],
+        );
+        ctrl.setDataCategory('teachers');
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(body: SchoolDataTab(controller: ctrl)),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Bu Siti'), findsOneWidget);
+        await tester.longPress(find.text('Bu Siti'));
+        await tester.pumpAndSettle();
+        expect(find.text('Pilih Semua'), findsNothing);
+
+        await tester.tap(find.text('Siswa').first);
+        await tester.pumpAndSettle();
+
+        await tester.longPress(find.text('Siswa Kelas Lain'));
+        await tester.pumpAndSettle();
+        expect(find.text('Pilih Semua'), findsNothing);
+
+        await tester.longPress(find.text('Siswa Kelas Sendiri'));
+        await tester.pumpAndSettle();
+        expect(find.text('Pilih Semua'), findsOneWidget);
+        ctrl.dispose();
+      },
+    );
+
+    testWidgets(
+      'UserFormDialog disables Save in edit mode until fields actually change',
+      (tester) async {
+        final ctrl = _FakeTeacherPortalController(
+          fakeRole: 'school_admin',
+          fakeCurrentUser: {'id': 1, 'role': 'school_admin'},
+          fakeClasses: const [
+            {'id': 1, 'name': 'X RPL 1'},
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: UserFormDialog(
+                controller: ctrl,
+                userData: {
+                  'id': 10,
+                  'name': 'Ahmad Siswa',
+                  'email': 'ahmad@sekolah.id',
+                  'nisn': '0011223344',
+                  'role': 'student',
+                  'class_major_id': 1,
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final saveBtnFinder =
+            find.widgetWithText(ElevatedButton, 'Simpan Perubahan');
+        expect(saveBtnFinder, findsOneWidget);
+        expect(tester.widget<ElevatedButton>(saveBtnFinder).onPressed, isNull);
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Ahmad Siswa'),
+          'Ahmad Updated',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(saveBtnFinder).onPressed,
+          isNotNull,
+        );
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'Ahmad Updated'),
+          'Ahmad Siswa',
+        );
+        await tester.pumpAndSettle();
+        expect(tester.widget<ElevatedButton>(saveBtnFinder).onPressed, isNull);
+        ctrl.dispose();
+      },
+    );
+
+    testWidgets(
+      'ClassFormDialog disables Save in edit mode until fields change',
+      (tester) async {
+        final ctrl = _FakeTeacherPortalController(
+          fakeRole: 'school_admin',
+          fakeCurrentUser: {'id': 1, 'role': 'school_admin'},
+          fakeClasses: const [
+            {'id': 1, 'name': 'X RPL 1'},
+          ],
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ClassFormDialog(
+                controller: ctrl,
+                classData: {'id': 1, 'name': 'X RPL 1'},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final saveBtnFinder =
+            find.widgetWithText(ElevatedButton, 'Simpan Perubahan');
+        expect(saveBtnFinder, findsOneWidget);
+        expect(tester.widget<ElevatedButton>(saveBtnFinder).onPressed, isNull);
+
+        await tester.tap(find.text('XI'));
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(saveBtnFinder).onPressed,
+          isNotNull,
+        );
+        ctrl.dispose();
+      },
+    );
+
+    testWidgets(
+      'ExamFormDialog disables Save in edit mode until fields change',
+      (tester) async {
+        await initializeDateFormatting('id_ID');
+        final ctrl = _FakeTeacherPortalController(
+          fakeRole: 'school_admin',
+          fakeCurrentUser: {'id': 1, 'role': 'school_admin'},
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ExamFormDialog(
+                controller: ctrl,
+                exam: const {
+                  'id': 77,
+                  'title': 'UTS Matematika',
+                  'subject': 'Matematika',
+                  'url': 'https://docs.google.com/forms/d/test',
+                  'token': 'ABC123',
+                  'duration_minutes': 60,
+                  'is_active': true,
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final saveBtnFinder =
+            find.widgetWithText(ElevatedButton, 'Simpan Perubahan');
+        expect(saveBtnFinder, findsOneWidget);
+        expect(tester.widget<ElevatedButton>(saveBtnFinder).onPressed, isNull);
+
+        await tester.enterText(
+          find.widgetWithText(TextFormField, 'UTS Matematika'),
+          'UTS Matematika Revisi',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(saveBtnFinder).onPressed,
+          isNotNull,
+        );
+        ctrl.dispose();
+      },
+    );
+
+    testWidgets(
+      'SettingsScreen & LoginScreen server URL edit buttons stay disabled until modified',
+      (tester) async {
+        AppConfig.setCustomBaseUrl('https://shiei.example.com');
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: const SettingsScreen(),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+
+        final settingsSaveFinder =
+            find.widgetWithText(ElevatedButton, 'Simpan Pengaturan Server');
+        await tester.ensureVisible(settingsSaveFinder);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(settingsSaveFinder).onPressed,
+          isNull,
+        );
+
+        await tester.enterText(
+          find.widgetWithText(TextField, AppConfig.inputBaseUrl),
+          'https://shiei-new.example.com',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(settingsSaveFinder).onPressed,
+          isNotNull,
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: const LoginScreen(),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+
+        await tester.tap(find.byTooltip('Pengaturan Server'));
+        await tester.pumpAndSettle();
+
+        final dialogSaveFinder = find.widgetWithText(ElevatedButton, 'Simpan');
+        expect(dialogSaveFinder, findsOneWidget);
+        expect(
+          tester.widget<ElevatedButton>(dialogSaveFinder).onPressed,
+          isNull,
+        );
+
+        await tester.enterText(
+          find.widgetWithText(TextField, AppConfig.inputBaseUrl),
+          'https://shiei-updated.example.com',
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ElevatedButton>(dialogSaveFinder).onPressed,
+          isNotNull,
+        );
+      },
+    );
+  });
+}
+
+class _FakeTeacherPortalController extends TeacherPortalController {
+  final String fakeRole;
+  final Map<String, dynamic> fakeCurrentUser;
+  final List<Map<String, dynamic>> fakeClasses;
+  final List<Map<String, dynamic>> fakeTeachers;
+  final List<Map<String, dynamic>> fakeStudents;
+  String _fakeCategory = 'students';
+
+  _FakeTeacherPortalController({
+    required this.fakeRole,
+    required this.fakeCurrentUser,
+    this.fakeClasses = const [],
+    this.fakeTeachers = const [],
+    this.fakeStudents = const [],
+  });
+
+  @override
+  bool get isLoading => false;
+
+  @override
+  bool get isStudentsLoading => false;
+
+  @override
+  bool get isTeachersLoading => false;
+
+  @override
+  bool get isUsersLoading => false;
+
+  @override
+  bool get isClassesLoading => false;
+
+  @override
+  String? get userRole => fakeRole;
+
+  @override
+  bool get isTeacher => fakeRole.toLowerCase() == 'teacher';
+
+  @override
+  bool get isAdmin =>
+      (fakeRole.toLowerCase() == 'school_admin' ||
+          fakeRole.toLowerCase() == 'super_admin') &&
+      !isTeacher;
+
+  @override
+  Map<String, dynamic>? get currentUser => fakeCurrentUser;
+
+  @override
+  List<Map<String, dynamic>> get classes => fakeClasses;
+
+  @override
+  List<Map<String, dynamic>> get teachers => fakeTeachers;
+
+  @override
+  List<Map<String, dynamic>> get students => fakeStudents;
+
+  @override
+  List<Map<String, dynamic>> get filteredTeachers => fakeTeachers;
+
+  @override
+  List<Map<String, dynamic>> get filteredStudents => fakeStudents;
+
+  @override
+  String get dataCategory => _fakeCategory;
+
+  @override
+  void setDataCategory(String category) {
+    _fakeCategory = category;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> loadClasses({bool clearPrevious = false}) async {}
+
+  @override
+  Future<void> loadStudents({bool clearPrevious = false}) async {}
+
+  @override
+  Future<void> loadTeachers({bool clearPrevious = false}) async {}
+
+  @override
+  Future<void> loadAllUsers({bool clearPrevious = false}) async {}
+
+  @override
+  Future<void> loadExams({bool clearPrevious = false}) async {}
 }

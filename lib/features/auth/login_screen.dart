@@ -129,12 +129,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(90, 42),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-              ),
-              onPressed: () async {
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: serverController,
+              builder: (_, value, __) {
+                final trimmedUrl = value.text.trim();
+                final hasChanges =
+                    trimmedUrl.isNotEmpty && trimmedUrl != AppConfig.inputBaseUrl.trim();
+                return ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(90, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  onPressed: !hasChanges
+                      ? null
+                      : () async {
                 final rawUrl = serverController.text.trim();
                 Navigator.pop(ctx);
 
@@ -231,7 +239,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   }
                 }
               },
-              child: const Text('Simpan'),
+                  child: const Text('Simpan'),
+                );
+              },
             ),
           ],
         ),
@@ -605,8 +615,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: const Padding(
                                   padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
+                                  child: Wrap(
+                                    alignment: WrapAlignment.center,
+                                    crossAxisAlignment: WrapCrossAlignment.center,
                                     children: [
                                       Icon(Icons.info_outline_rounded, size: 14, color: AppTheme.textSecondary),
                                       SizedBox(width: 6),

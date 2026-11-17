@@ -383,6 +383,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String? customUrl,
     String? providerLabel,
   }) async {
+    String? previousEmail = _browserLoginEmail;
     String? targetUrl = customUrl;
     String? pickedEmail;
     if (customUrl == null) {
@@ -422,6 +423,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       arguments: <String, dynamic>{
         if (targetUrl != null) 'initialUrl': targetUrl,
         if (pickedEmail != null) 'prefillEmail': pickedEmail,
+        if (previousEmail != null && previousEmail.isNotEmpty)
+          'previousEmail': previousEmail,
         if (providerLabel != null)
           'providerLabel': providerLabel
         else if (customUrl == null)
@@ -1149,27 +1152,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ] else ...[
                   const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 42),
-                      backgroundColor: AppTheme.primaryShiei,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: _isSavingServer
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save_rounded, size: 18),
-                    label: Text(
-                      _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                    ),
-                    onPressed: _isSavingServer ? null : _saveServerUrl,
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _serverUrlController,
+                    builder: (context, value, _) {
+                      final trimmed = value.text.trim();
+                      final hasChanged =
+                          trimmed.isNotEmpty && trimmed != AppConfig.inputBaseUrl.trim();
+                      return ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 42),
+                          backgroundColor: AppTheme.primaryShiei,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: _isSavingServer
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.save_rounded, size: 18),
+                        label: Text(
+                          _isSavingServer ? 'Menguji Koneksi...' : 'Simpan Pengaturan Server',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed:
+                            (_isSavingServer || !hasChanged) ? null : _saveServerUrl,
+                      );
+                    },
                   ),
                 ],
               ],

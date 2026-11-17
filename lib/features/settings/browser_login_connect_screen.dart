@@ -14,12 +14,14 @@ class BrowserLoginConnectScreen extends StatefulWidget {
   final String? initialUrl;
   final String? prefillEmail;
   final String? providerLabel;
+  final String? previousEmail;
 
   const BrowserLoginConnectScreen({
     super.key,
     this.initialUrl,
     this.prefillEmail,
     this.providerLabel,
+    this.previousEmail,
   });
 
   @override
@@ -33,21 +35,37 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
   late String _currentUrl;
   bool _hasCompleted = false;
   bool _didInjectEmail = false;
+  bool _didTryAuthUserSwitch = false;
   bool _hasAuthCookie = false;
   bool _isGoogleFlow = true;
+  late bool _isSwitchingOrAdding;
 
   @override
   void initState() {
     super.initState();
     final raw = (widget.initialUrl ?? '').trim();
+    final prefill = (widget.prefillEmail ?? '').trim().toLowerCase();
+    final prev = (widget.previousEmail ?? '').trim().toLowerCase();
+    final isDifferentEmail =
+        prefill.isNotEmpty && prev.isNotEmpty && prefill != prev;
+    final isAddSessionUrl = raw.toLowerCase().contains('addsession');
+    _isSwitchingOrAdding =
+        isAddSessionUrl || isDifferentEmail || (prefill.isEmpty && prev.isNotEmpty);
+
     _currentUrl = _normalizeConnectUrl(raw) ??
-        _buildGoogleLoginUrl(prefillEmail: widget.prefillEmail);
+        _buildGoogleLoginUrl(
+          prefillEmail: widget.prefillEmail,
+          forceAddSession: isDifferentEmail,
+        );
     _isGoogleFlow = _isGoogleHost(_currentUrl);
   }
 
-  static String _buildGoogleLoginUrl({String? prefillEmail}) {
+  static String _buildGoogleLoginUrl({
+    String? prefillEmail,
+    bool forceAddSession = false,
+  }) {
     final email = (prefillEmail ?? '').trim();
-    if (email.isNotEmpty) {
+    if (email.isNotEmpty && !forceAddSession) {
       return Uri.https('accounts.google.com', '/AccountChooser', {
         'continue': 'https://docs.google.com/forms',
         'Email': email,
@@ -56,7 +74,14 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
     }
     return Uri.https('accounts.google.com', '/AddSession', {
       'continue': 'https://docs.google.com/forms',
+      if (email.isNotEmpty) 'Email': email,
+      if (email.isNotEmpty) 'login_hint': email,
     }).toString();
+  }
+
+  static bool _isAccountsGoogleUrl(String url) {
+    final host = (Uri.tryParse(url)?.host ?? '').toLowerCase();
+    return host.contains('accounts.google.com');
   }
 
   static bool _isGoogleHost(String url) {
@@ -155,16 +180,10 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
       final hasGoogleAuth =
           googleCookies.any((c) => googleAuthCookieNames.contains(c.name));
       final lowerUrl = loadedUrl.toLowerCase();
-      final stillOnGoogleSignIn =
-          lowerUrl.contains('accounts.google.com') &&
-          (lowerUrl.contains('servicelogin') ||
-              lowerUrl.contains('signin') ||
-              lowerUrl.contains('addsession') ||
-              lowerUrl.contains('accountchooser') ||
-              lowerUrl.contains('challenge'));
-      final landedOnGoogleService =
-          lowerUrl.contains('docs.google.com') ||
-          lowerUrl.contains('myaccount.google.com');
+      final onAccountsGoogle = _isAccountsGoogleUrl(loadedUrl);
+      final landedOnGoogleService = !onAccountsGoogle &&
+          (lowerUrl.contains('docs.google.com') ||
+              lowerUrl.contains('myaccount.google.com'));
 
       final hasSiteAuth = hostCookies.any((c) {
         final lower = c.name.toLowerCase();
@@ -174,16 +193,50 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
             lower.contains('moodle');
       });
 
-      final detected = _isGoogleFlow &&
-          hasGoogleAuth &&
-          (landedOnGoogleService || !stillOnGoogleSignIn);
+      final readyToComplete = _isGoogleFlow
+          ? (hasGoogleAuth && !onAccountsGoogle && landedOnGoogleService)
+          : hasSiteAuth;
 
       if (mounted) {
-        setState(() => _hasAuthCookie = _isGoogleFlow ? hasGoogleAuth : hasSiteAuth);
+        setState(
+          () => _hasAuthCookie =
+              _isGoogleFlow ? (hasGoogleAuth && !onAccountsGoogle) : hasSiteAuth,
+        );
       }
 
-      if (detected) {
-        await _completeAndClose(loadedUrl);
+      if (_isGoogleFlow && readyToComplete) {
+        final extracted = await _extractSignedInGoogleEmail();
+        final prevLower = (widget.previousEmail ?? '').trim().toLowerCase();
+        final prefill = (widget.prefillEmail ?? '').trim();
+
+        // If switching to a specific different email, ensure Forms actually switched authuser
+        if (prefill.isNotEmpty &&
+            extracted != null &&
+            extracted.toLowerCase() != prefill.toLowerCase()) {
+          if (!_didTryAuthUserSwitch && _webController != null) {
+            _didTryAuthUserSwitch = true;
+            final switchUrl = Uri.https('docs.google.com', '/forms', {
+              'authuser': prefill,
+            }).toString();
+            await _webController!.loadUrl(
+              urlRequest: URLRequest(url: WebUri(switchUrl)),
+            );
+            return;
+          }
+          // Still on the old account — let the user complete login or press Selesai manually
+          return;
+        }
+
+        // During AddSession (no prefill), avoid auto-closing if landing still shows old account
+        if (_isSwitchingOrAdding &&
+            prefill.isEmpty &&
+            prevLower.isNotEmpty &&
+            extracted != null &&
+            extracted.toLowerCase() == prevLower) {
+          return;
+        }
+
+        await _completeAndClose(loadedUrl, extracted);
       }
     } catch (_) {
       // Ignore transient WebView cookie bridge errors during redirects
@@ -197,9 +250,9 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
       final res = await controller.evaluateJavascript(source: '''
         (function() {
           try {
-            var nodes = document.querySelectorAll('[data-email], [aria-label*="@"], a[href*="SignOutOptions"]');
-            for (var i = 0; i < nodes.length; i++) {
-              var val = (nodes[i].getAttribute('data-email') || nodes[i].getAttribute('aria-label') || nodes[i].innerText || '');
+            var priorityNodes = document.querySelectorAll('a[href*="SignOutOptions"], a[aria-label*="Akun Google"], a[aria-label*="Google Account"], [data-email]');
+            for (var i = 0; i < priorityNodes.length; i++) {
+              var val = (priorityNodes[i].getAttribute('data-email') || priorityNodes[i].getAttribute('aria-label') || priorityNodes[i].innerText || '');
               var m = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/);
               if (m) return m[0];
             }
@@ -217,13 +270,16 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
     return null;
   }
 
-  Future<void> _completeAndClose([String? sourceUrl]) async {
+  Future<void> _completeAndClose([
+    String? sourceUrl,
+    String? extractedEmail,
+  ]) async {
     if (_hasCompleted) return;
     _hasCompleted = true;
     final urlToSave = sourceUrl ?? _currentUrl;
     String? resolvedEmail = widget.prefillEmail?.trim();
     if (resolvedEmail == null || resolvedEmail.isEmpty) {
-      resolvedEmail = await _extractSignedInGoogleEmail();
+      resolvedEmail = extractedEmail ?? await _extractSignedInGoogleEmail();
     }
     await TokenStorage.setKeepBrowserLoginEnabled(true);
     await TokenStorage.saveBrowserLoginMeta(
@@ -231,6 +287,7 @@ class _BrowserLoginConnectScreenState extends State<BrowserLoginConnectScreen> {
       label: _resolveLabel(urlToSave),
       email: resolvedEmail,
       url: urlToSave,
+      clearEmailIfMissing: _isSwitchingOrAdding,
     );
     if (mounted) {
       Navigator.of(context).pop(true);

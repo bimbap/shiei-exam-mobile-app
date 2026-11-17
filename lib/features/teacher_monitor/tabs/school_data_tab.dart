@@ -246,10 +246,16 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
   }
 
   void _selectAll(String category) {
+    if ((category == 'teachers' || category == 'users') &&
+        !widget.controller.isAdmin) {
+      return;
+    }
     HapticFeedback.lightImpact();
     List<dynamic> items;
     if (category == 'students') {
-      items = widget.controller.filteredStudents;
+      items = widget.controller.filteredStudents
+          .where((s) => widget.controller.canManageStudent(s))
+          .toList();
     } else if (category == 'teachers') {
       items = widget.controller.filteredTeachers;
     } else if (category == 'users') {
@@ -268,6 +274,14 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
           return true;
         })
         .toSet();
+
+    if (allIds.isEmpty) {
+      setState(() {
+        _selectedIds.clear();
+        _isSelectionMode = false;
+      });
+      return;
+    }
 
     setState(() {
       if (_selectedIds.containsAll(allIds)) {
@@ -1355,7 +1369,9 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
           ),
 
         // 8. Floating Multi-Selection Action Bar (Contextual by selection count)
-        if (_isSelectionMode && activeCategory != 'classes')
+        if (_isSelectionMode &&
+            activeCategory != 'classes' &&
+            (widget.controller.isAdmin || activeCategory == 'students'))
           Positioned(
             left: 16,
             right: 16,
@@ -2486,7 +2502,8 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
 
   Widget _buildStudentItemCard(BuildContext context, Map<String, dynamic> student, bool isDark) {
     final studentId = student['id'] is int ? student['id'] as int : int.tryParse(student['id'].toString()) ?? 0;
-    final isSelected = _selectedIds.contains(studentId);
+    final bool canSelectStudent = widget.controller.canManageStudent(student);
+    final isSelected = canSelectStudent && _selectedIds.contains(studentId);
 
     final name = student['name']?.toString() ?? 'Siswa';
     final rawNisn = student['nisn']?.toString().trim();
@@ -2523,7 +2540,7 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
         child: InkWell(
           onTap: () {
             if (_isSelectionMode) {
-              _toggleSelection(studentId);
+              if (canSelectStudent) _toggleSelection(studentId);
               return;
             }
             Navigator.of(context).push(
@@ -2536,6 +2553,7 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
             );
           },
           onLongPress: () {
+            if (!canSelectStudent) return;
             if (!_isSelectionMode) {
               _enterSelectionMode(studentId);
             } else {
@@ -2551,7 +2569,7 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
                 AnimatedSize(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  child: _isSelectionMode
+                  child: (_isSelectionMode && canSelectStudent)
                       ? Padding(
                           padding: const EdgeInsets.only(right: 10),
                           child: ShieiCheckbox(
@@ -2739,8 +2757,9 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
 
   Widget _buildTeacherItemCard(BuildContext context, Map<String, dynamic> teacher, bool isDark) {
     final teacherId = teacher['id'] is int ? teacher['id'] as int : int.tryParse(teacher['id'].toString()) ?? 0;
-    final isSelected = _selectedIds.contains(teacherId);
     final isSelf = widget.controller.currentUser?['id'] == teacherId;
+    final canSelectTeacher = widget.controller.isAdmin && !isSelf;
+    final isSelected = canSelectTeacher && _selectedIds.contains(teacherId);
 
     final name = teacher['name']?.toString() ?? 'Guru';
     final rawNip = teacher['nip']?.toString().trim();
@@ -2790,13 +2809,13 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
         child: InkWell(
           onTap: () {
             if (_isSelectionMode) {
-              if (!isSelf) _toggleSelection(teacherId);
+              if (canSelectTeacher) _toggleSelection(teacherId);
               return;
             }
             _showTeacherDetailModal(context, teacher);
           },
           onLongPress: () {
-            if (isSelf) return;
+            if (!canSelectTeacher) return;
             if (!_isSelectionMode) {
               _enterSelectionMode(teacherId);
             } else {
@@ -2812,7 +2831,7 @@ class SchoolDataTabState extends State<SchoolDataTab> with SingleTickerProviderS
                 AnimatedSize(
                   duration: const Duration(milliseconds: 220),
                   curve: Curves.easeOutCubic,
-                  child: _isSelectionMode
+                  child: (_isSelectionMode && widget.controller.isAdmin)
                       ? Padding(
                           padding: const EdgeInsets.only(right: 10),
                           child: isSelf
