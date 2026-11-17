@@ -133,7 +133,7 @@ import UserNotifications
         UIPasteboard.general.items = []
         result(true)
 
-      case "hasGoogleAccountsPermission", "requestGoogleAccountsPermission":
+      case "hasGoogleAccountsPermission", "requestGoogleAccountsPermission", "openAppPermissionSettings":
         result(true)
 
       case "getDeviceGoogleAccounts", "pickDeviceGoogleAccount":

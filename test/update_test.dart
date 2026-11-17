@@ -57,7 +57,7 @@ void main() {
   test('VersionChangelog parses categories correctly', () {
     final changelogs = AppUpdateService.fallbackChangelogs;
     expect(changelogs.isNotEmpty, isTrue);
-    expect(changelogs.first.version, equals('2.5.0'));
+    expect(changelogs.first.version, equals('2.6.2'));
     expect(changelogs.first.isLatest, isTrue);
     expect(changelogs.first.categories.length, equals(3));
     expect(changelogs.first.categories.first.name, equals('Fitur Baru'));
@@ -80,13 +80,13 @@ void main() {
     expect(AppUpdateService.compareVersions('2.6.0', '2.5.9'), greaterThan(0));
 
     final enforcedByMinVersion = AppUpdateInfo.fromJson({
-      'client_version': '2.5.0',
-      'latest_version': '2.5.1',
+      'client_version': '2.6.2',
+      'latest_version': '2.7.0',
       'latest_build': 12,
       'has_update': false,
       'force_update': false,
       'is_mandatory': false,
-      'min_supported_version': '2.5.1',
+      'min_supported_version': '2.7.0',
       'checksum_sha256': 'A' * 64,
       'download_url': 'https://example.com/shiei.apk',
     });
@@ -94,17 +94,32 @@ void main() {
     expect(enforcedByMinVersion.checksumSha256, equals('a' * 64));
     expect(AppUpdateService.instance.isForceUpdateRequired(enforcedByMinVersion), isTrue);
 
+    final sameVersionForced = AppUpdateInfo.fromJson({
+      'client_version': '2.6.2',
+      'latest_version': '2.6.2',
+      'latest_build': 8,
+      'has_update': true,
+      'force_update': true,
+      'is_mandatory': true,
+      'min_supported_version': '2.4.0',
+      'download_url': 'https://example.com/shiei.apk',
+    });
+    expect(AppUpdateService.instance.isForceUpdateRequired(sameVersionForced), isFalse);
+    final normalizedSame = AppUpdateService.instance.normalizeUpdatePolicy(sameVersionForced);
+    expect(normalizedSame.hasUpdate, isFalse);
+    expect(normalizedSame.forceUpdate, isFalse);
+
     final optionalUpdate = AppUpdateInfo(
-      clientVersion: '2.5.0',
-      latestVersion: '2.5.1',
-      latestBuild: 12,
+      clientVersion: '2.6.2',
+      latestVersion: '2.6.3',
+      latestBuild: 9,
       hasUpdate: true,
       forceUpdate: false,
       isMandatory: false,
       minSupportedVersion: '2.4.0',
-      releaseDate: '12 November 2026',
+      releaseDate: '17 November 2026',
       releaseTitle: 'Optional Patch',
-      fileSize: '25 MB',
+      fileSize: '86.7 MB',
       downloadUrl: 'https://example.com/shiei.apk',
       highlights: const [],
     );

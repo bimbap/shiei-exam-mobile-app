@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../../config/app_config.dart';
 import '../api/api_client.dart';
 
@@ -113,19 +114,46 @@ class AppUpdateService {
   static const MethodChannel _platformChannel = MethodChannel('id.shiei/lockdown');
   final ApiClient _api = ApiClient();
 
-  static const String currentAppVersion = '2.5.0';
-  static const int currentAppBuild = 5;
-  static const String currentBuildNumber = '2026.5';
+  static String _runtimeAppVersion = '2.6.2';
+  static int _runtimeAppBuild = 8;
+
+  static String get currentAppVersion => _runtimeAppVersion;
+  static int get currentAppBuild => _runtimeAppBuild;
+  static String get currentBuildNumber => '2026.$_runtimeAppBuild';
+
+  /// Loads actual installed app version and build number from native bundle metadata (pubspec.yaml).
+  static Future<void> initPackageInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final pkgVer = info.version.trim();
+      final pkgBuild = int.tryParse(info.buildNumber.trim());
+      if (pkgVer.isNotEmpty) {
+        _runtimeAppVersion = pkgVer.split('-').first.split('+').first.trim();
+      }
+      if (pkgBuild != null && pkgBuild > 0) {
+        _runtimeAppBuild = pkgBuild;
+      }
+    } catch (_) {
+      // Headless unit tests or unsupported embedders retain compiled fallback defaults
+    }
+  }
+
+  @visibleForTesting
+  static void setRuntimeVersionForTest({
+    required String version,
+    required int build,
+  }) {
+    _runtimeAppVersion = version;
+    _runtimeAppBuild = build;
+  }
 
   /// True if running in debug mode (development / debug build)
   static bool get isDebugBuild => kDebugMode;
 
   /// Dynamic display version string differentiating debug builds from production releases.
-  /// E.g. '2.5.0-debug' vs '2.5.0'
   static String get displayAppVersion => kDebugMode ? '$currentAppVersion-debug' : currentAppVersion;
 
   /// Dynamic build number string.
-  /// E.g. '2026.5-dev' vs '2026.5'
   static String get displayBuildNumber => kDebugMode ? '$currentBuildNumber-dev' : currentBuildNumber;
 
   /// Formatted full version label for settings, changelogs, and headers.
@@ -134,10 +162,44 @@ class AppUpdateService {
   // Local fallback changelogs to ensure offline availability
   static final List<VersionChangelog> fallbackChangelogs = [
     VersionChangelog(
+      version: '2.6.2',
+      buildNumber: '2026.8',
+      releaseDate: '17 November 2026',
+      isLatest: true,
+      title: 'Pembaruan Aplikasi v2.6.2',
+      headline: 'Pembaruan v2.6.2 menghadirkan mode browser Incognito sebagai default, pengelola akun Google khusus di dalam aplikasi, grafik kedisiplinan interaktif, dan sinkronisasi versi otomatis.',
+      categories: [
+        ChangelogCategory(
+          name: 'Fitur Baru',
+          items: [
+            'Mode Guest (Incognito) Default: Peramban ujian kini otomatis berjalan tanpa menyimpan riwayat atau cookie.',
+            'Account Picker Google Khusus SHIEI: Pemilihan, tambah akun baru, serta konfirmasi putus/hapus akun permanen langsung di antarmuka SHIEI.',
+            'Grafik Kedisiplinan Interaktif: Grafik garis di tab Profil lengkap dengan tooltip judul ujian dan format durasi jam-menit.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Keamanan & Kenyamanan Ujian',
+          items: [
+            'Izin Akses Akun Terpisah: Slide khusus izin akun/kontak sebelum memilih mode login browser.',
+            'Pembersihan Clipboard Senyap: Sanitasi clipboard di awal sesi ujian tanpa notifikasi pop-up OS.',
+            'Sinkronisasi Versi Otomatis: Mencegah stuck pembaruan berulang ketika versi aplikasi terbaru sudah terpasang.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Peningkatan & Perbaikan',
+          items: [
+            'Pengumuman Pengawas Tertarget: Dukungan target kelas atau siswa aktif serta penekanan dialog pada ujian selesai.',
+            'Perbaikan Layout & Responsivitas: Tombol dialog sejajar simetris serta tata letak optimal di layar 320px.',
+            'Tour Installer & Maskot Terbaru: Ilustrasi chibi baru dan SHIEI Quad Banner.',
+          ],
+        ),
+      ],
+    ),
+    VersionChangelog(
       version: '2.5.0',
       buildNumber: '2026.5',
       releaseDate: '30 September 2026',
-      isLatest: true,
+      isLatest: false,
       title: 'Pembaruan Aplikasi v2.5.0',
       headline: 'Pembaruan v2.5.0 hadir dengan sistem pembaruan otomatis yang lebih praktis serta peningkatan keamanan agar ujian berjalan lancar dan tenang.',
       categories: [
@@ -409,11 +471,39 @@ class AppUpdateService {
   /// True when update policy requires blocking lobby access until updated.
   bool isForceUpdateRequired(AppUpdateInfo info) {
     final belowMinSupported = compareVersions(currentAppVersion, info.minSupportedVersion) < 0;
-    // Allow builds that are newer than or equal to the official release (e.g. during release testing).
-    if (!belowMinSupported && compareVersions(currentAppVersion, info.latestVersion) > 0) {
+    final cmp = compareVersions(currentAppVersion, info.latestVersion);
+    final isAlreadyUpToDate = cmp > 0 || (cmp == 0 && currentAppBuild >= info.latestBuild);
+    // Allow builds equal to or newer than the server's latest release without trapping users in update loops.
+    if (!belowMinSupported && isAlreadyUpToDate) {
       return false;
     }
     return info.forceUpdate || belowMinSupported || (info.hasUpdate && info.isMandatory);
+  }
+
+  /// Normalizes server update response against locally installed version & build number.
+  AppUpdateInfo normalizeUpdatePolicy(AppUpdateInfo info) {
+    final belowMinSupported = compareVersions(currentAppVersion, info.minSupportedVersion) < 0;
+    final cmp = compareVersions(currentAppVersion, info.latestVersion);
+    final isAlreadyUpToDate = !belowMinSupported &&
+        (cmp > 0 || (cmp == 0 && currentAppBuild >= info.latestBuild));
+    if (!isAlreadyUpToDate) {
+      return info;
+    }
+    return AppUpdateInfo(
+      clientVersion: currentAppVersion,
+      latestVersion: info.latestVersion,
+      latestBuild: info.latestBuild,
+      hasUpdate: false,
+      forceUpdate: false,
+      isMandatory: false,
+      minSupportedVersion: info.minSupportedVersion,
+      releaseDate: info.releaseDate,
+      releaseTitle: info.releaseTitle,
+      fileSize: info.fileSize,
+      downloadUrl: info.downloadUrl,
+      checksumSha256: info.checksumSha256,
+      highlights: info.highlights,
+    );
   }
 
   bool _isValidDownloadUri(String rawUrl) {
@@ -479,25 +569,28 @@ class AppUpdateService {
 
   /// Check for a newer version from the dev/backend server.
   Future<AppUpdateInfo?> checkForUpdate({
-    String currentVersion = currentAppVersion,
-    int currentBuild = currentAppBuild,
+    String? currentVersion,
+    int? currentBuild,
     String? platform,
   }) async {
+    final effectiveVersion = currentVersion ?? currentAppVersion;
+    final effectiveBuild = currentBuild ?? currentAppBuild;
     final activePlatform = platform ?? (Platform.isIOS ? 'ios' : (Platform.isWindows ? 'windows' : 'android'));
     try {
       final res = await _api.get(
         '/app/version-check',
         queryParameters: {
           'platform': activePlatform,
-          'version': currentVersion,
-          'build': currentBuild,
+          'version': effectiveVersion,
+          'build': effectiveBuild,
         },
       );
 
       if (res.statusCode == 200 && res.data != null && res.data['success'] == true) {
-        final info = AppUpdateInfo.fromJson(Map<String, dynamic>.from(res.data));
-        latestUpdateInfo = info;
-        return info;
+        final rawInfo = AppUpdateInfo.fromJson(Map<String, dynamic>.from(res.data));
+        final normalized = normalizeUpdatePolicy(rawInfo);
+        latestUpdateInfo = normalized;
+        return normalized;
       }
     } catch (e) {
       debugPrint('[AppUpdateService] Error checking version: $e');
@@ -618,7 +711,12 @@ class AppUpdateService {
           : 'shiei-kiosk-update.apk';
       final savePath = '${baseDir.path}/$filename';
 
-      final dio = Dio();
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 20),
+          receiveTimeout: const Duration(minutes: 3),
+        ),
+      );
       await dio.download(
         url,
         savePath,

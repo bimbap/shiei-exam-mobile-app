@@ -75,7 +75,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
       if (!mounted) return;
 
       // 1. Version tracking
-      const currentVersion = AppUpdateService.currentAppVersion;
+      final currentVersion = AppUpdateService.currentAppVersion;
       await TokenStorage.setLastAppVersion(currentVersion);
       await TokenStorage.setFirstOpenDone();
 

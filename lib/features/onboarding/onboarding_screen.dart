@@ -24,6 +24,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   bool _isNotificationGranted = false;
   bool _canInstallPackages = false;
   bool _hasContactsPermission = false;
+  bool _contactsPermissionDeniedOnce = false;
   bool _keepBrowserLogin = false;
   bool _browserLoginConnected = false;
   String? _browserLoginEmail;
@@ -72,7 +73,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
   Future<void> _requestAccountsPermission() async {
     final granted = await VolumeLockService.requestGoogleAccountsPermission();
     if (!mounted) return;
-    setState(() => _hasContactsPermission = granted);
+    setState(() {
+      _hasContactsPermission = granted;
+      if (!granted) {
+        _contactsPermissionDeniedOnce = true;
+      }
+    });
   }
 
   Future<void> _connectGoogleDuringOnboarding() async {
@@ -143,6 +149,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     if (_currentIndex == 3) {
       return _canInstallPackages;
     }
+    if (_currentIndex == 4) {
+      return _hasContactsPermission;
+    }
     return true;
   }
 
@@ -210,7 +219,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
     final bg = AppTheme.background(context);
     final skipColor = isDark ? AppTheme.textSecondary : const Color(0xFF64748B);
     final dotInactive = isDark ? AppTheme.borderSubtle : const Color(0xFFCBD5E1);
-    final bool canSkip = !isLast && _isNotificationGranted && _canInstallPackages;
+    final bool canSkip = !isLast &&
+        _isNotificationGranted &&
+        _canInstallPackages &&
+        _hasContactsPermission;
 
     return Scaffold(
       backgroundColor: bg,
@@ -757,13 +769,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
 
   // --- SLIDE 5: CONTACTS / GOOGLE ACCOUNT LIST PERMISSION ---
   Widget _buildSlide4ContactsPermission(bool isDark) {
-    final descColor = isDark ? AppTheme.textSecondary : const Color(0xFF475569);
     return _buildSlideContainer(
       isDark: isDark,
       tag: 'IZIN AKUN & KONTAK',
       title: 'Akses Daftar Akun Perangkat',
       description:
-          'Digunakan hanya untuk membaca daftar email Google yang ada di perangkat saat memilih Mode Akun Terhubung. Opsional jika Anda memakai Mode Guest (Incognito).',
+          'Wajib diaktifkan sebelum memilih mode peramban ujian agar SHIEI dapat membaca daftar akun Google perangkat dengan aman di dalam aplikasi tanpa dialog bawaan OS.',
       imageAsset: 'assets/images/shiei_mascot_contacts.jpg',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
@@ -827,15 +838,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Bisa langsung tekan Lanjutkan bila hanya menggunakan Mode Guest',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: descColor.withValues(alpha: 0.85),
+                  if (_contactsPermissionDeniedOnce) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: VolumeLockService.openAppPermissionSettings,
+                      icon: const Icon(Icons.settings_outlined, size: 15),
+                      label: const Text(
+                        'Buka Setelan Izin Aplikasi',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
       ),

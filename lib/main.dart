@@ -33,6 +33,7 @@ void main() async {
   await initializeDateFormatting('id_ID', null);
   Intl.defaultLocale = 'id_ID';
   await AppConfig.init();
+  await AppUpdateService.initPackageInfo();
   await ThemeController.instance.init();
 
   // Handle single active session revocation globally
@@ -173,7 +174,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // Detect if this launch is an app update
     final lastVersion = await TokenStorage.getLastAppVersion();
-    const currentVersion = AppUpdateService.currentAppVersion;
+    final currentVersion = AppUpdateService.currentAppVersion;
     final isOnboarded = await TokenStorage.isOnboardingCompleted();
     final token = await TokenStorage.getToken();
 

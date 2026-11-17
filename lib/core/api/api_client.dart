@@ -58,9 +58,12 @@ class ApiClient {
               final payload = rawData['data'] is Map
                   ? Map<String, dynamic>.from(rawData['data'] as Map)
                   : Map<String, dynamic>.from(rawData);
-              final info = AppUpdateInfo.fromJson(payload);
+              final rawInfo = AppUpdateInfo.fromJson(payload);
+              final info = AppUpdateService.instance.normalizeUpdatePolicy(rawInfo);
               AppUpdateService.instance.latestUpdateInfo = info;
-              onForceUpdateRequired?.call(info);
+              if (AppUpdateService.instance.isForceUpdateRequired(info) || info.hasUpdate) {
+                onForceUpdateRequired?.call(info);
+              }
             }
           }
 

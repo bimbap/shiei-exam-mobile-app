@@ -500,6 +500,15 @@ class VolumeLockService {
     }
   }
 
+  /// Opens OS application details settings so user can grant denied permissions manually.
+  static Future<bool> openAppPermissionSettings() async {
+    try {
+      return await _channel.invokeMethod('openAppPermissionSettings') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Fetches device Google account emails on Android (requests GET_ACCOUNTS once if needed).
   /// Returns null when unavailable (iOS or permission denied) so callers can fall back cleanly.
   static Future<List<String>?> getDeviceGoogleAccounts() async {
