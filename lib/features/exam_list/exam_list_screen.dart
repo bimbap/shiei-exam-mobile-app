@@ -4036,38 +4036,34 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
     double resolveIntegrityScore(Map<String, dynamic> item) {
       final rawStatus = (item['status'] ?? 'completed').toString().toLowerCase();
+      final violationsCount = (item['violations_count'] as num?)?.toInt() ?? 0;
+      final violationLogs = (item['violation_logs'] as List?) ?? const [];
       final isLocked = item['is_locked'] == true ||
           rawStatus == 'locked' ||
           rawStatus == 'terminated' ||
           rawStatus == 'exited';
+      final isCompleted = rawStatus == 'completed' || rawStatus == 'submitted';
       final isEnded = rawStatus == 'ended' || rawStatus == 'expired' || item['is_expired'] == true;
       final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
-      final link = item['link'] is Map ? item['link'] as Map : const {};
-      final durMin = ((item['duration_minutes'] ??
-              link['duration_minutes'] ??
-              link['duration']) as num?)
-          ?.toInt() ??
-          60;
 
+      if (isLocked) return 22.0;
+      if (isCompleted && violationsCount == 0 && violationLogs.isEmpty) return 100.0;
+      if (isCompleted) {
+        final effectiveWarnings = math.max(violationsCount, violationLogs.isNotEmpty ? 1 : 0);
+        return (85.0 - ((effectiveWarnings - 1) * 15.0)).clamp(35.0, 85.0);
+      }
       if (isEnded && elapsedSec <= 0) return 10.0;
-      if (elapsedSec <= 0) return isLocked ? 18.0 : 50.0;
-      final totalSec = math.max(60, durMin * 60);
-      final pct = ((elapsedSec / totalSec) * 100.0).clamp(12.0, 100.0);
-      if (isLocked) return pct.clamp(12.0, 65.0);
-      return pct;
+      return 65.0;
     }
 
     String resolveDurationSummary(Map<String, dynamic> item) {
       final elapsedSec = (item['elapsed_seconds'] as num?)?.toInt() ?? 0;
-      final link = item['link'] is Map ? item['link'] as Map : const {};
-      final durMin = ((item['duration_minutes'] ??
-              link['duration_minutes'] ??
-              link['duration']) as num?)
-          ?.toInt();
       if (elapsedSec <= 0) return '0m';
       final elapsedMin = math.max(1, (elapsedSec / 60).round());
-      if (durMin != null && durMin > 0) {
-        return '${elapsedMin}m / ${durMin}m';
+      if (elapsedMin >= 60) {
+        final hours = elapsedMin ~/ 60;
+        final remMin = elapsedMin % 60;
+        return remMin == 0 ? '${hours}j' : '${hours}j ${remMin}m';
       }
       return '${elapsedMin}m';
     }
@@ -4150,7 +4146,7 @@ class _ExamListScreenState extends State<ExamListScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Efisiensi durasi fokus & kedisiplinan — ketuk/geser grafik',
+                      'Riwayat kedisiplinan & waktu kerja — ketuk/geser grafik',
                       style: TextStyle(fontSize: 11, color: subColor),
                     ),
                   ],

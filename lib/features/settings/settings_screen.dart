@@ -547,45 +547,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
         content: Text(
-          'Status koneksi untuk $accountDisplay akan diputuskan.\n\n• "Putuskan" menjaga email tetap di daftar cepat & cookie tidak langsung dibuang (tidak perlu ketik ulang kata sandi saat menyambung kembali).\n• "Putuskan & Hapus Cookie" membersihkan seluruh sesi web sekarang juga.',
+          'Status koneksi untuk $accountDisplay akan diputuskan.\n\n• "Putuskan & Hapus Sesi" memutus akun, membersihkan cookie browser, dan menghapusnya dari daftar cepat.\n• "Lepas Saja" menjaga email & sesi web agar bisa disambung ulang tanpa ketik sandi.',
           style: TextStyle(
             fontSize: 12.2,
             height: 1.45,
             color: isDark ? AppTheme.textSecondary : const Color(0xFF475569),
           ),
         ),
-        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Batal'),
-          ),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.dangerRed,
-              side: BorderSide(color: AppTheme.dangerRed.withValues(alpha: 0.5)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () => Navigator.pop(ctx, 'purge'),
-            child: const Text(
-              'Hapus Cookie',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryShiei,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () => Navigator.pop(ctx, 'disconnect'),
-            child: const Text(
-              'Putuskan',
-              style: TextStyle(fontWeight: FontWeight.bold),
+          SizedBox(
+            width: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 44),
+                    backgroundColor: AppTheme.dangerRed,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, 'purge'),
+                  child: const Text(
+                    'Putuskan & Hapus Sesi',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 42),
+                    foregroundColor: AppTheme.primaryGlow,
+                    side: BorderSide(
+                      color: AppTheme.primaryShiei.withValues(alpha: 0.45),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx, 'disconnect'),
+                  child: const Text(
+                    'Lepas Saja (Simpan Sesi)',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 40),
+                    foregroundColor: isDark
+                        ? AppTheme.textSecondary
+                        : const Color(0xFF475569),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    'Batal',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -598,12 +629,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _disconnectBrowserLogin({bool clearCookies = false}) async {
+    final removedEmail = _browserLoginEmail?.trim().toLowerCase();
     if (clearCookies) {
       await UrlExamPlayer.clearBrowserSessionCookies();
+      if (removedEmail != null && removedEmail.isNotEmpty) {
+        await TokenStorage.removeSavedBrowserEmail(removedEmail);
+        await TokenStorage.hideDeviceGoogleEmail(removedEmail);
+      }
     }
     await TokenStorage.clearBrowserLoginMeta();
+    await TokenStorage.setKeepBrowserLoginEnabled(false);
     if (!mounted) return;
     setState(() {
+      _keepBrowserLogin = false;
       _browserLoginConnected = false;
       _browserLoginLabel = null;
       _browserLoginEmail = null;
@@ -612,9 +650,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     AppNotification.showSuccess(
       context,
-      clearCookies ? 'Koneksi & Cookie Dihapus' : 'Koneksi Akun Diputuskan',
+      clearCookies ? 'Akun Diputuskan & Sesi Dihapus' : 'Koneksi Akun Dilepas',
       subtitle: clearCookies
-          ? 'Sesi web dibersihkan total. Pilih akun baru atau Mode Guest.'
+          ? 'Cookie & daftar akun dibersihkan total. Pilih akun baru atau Mode Guest.'
           : 'Akun dilepas sementara. Email & sesi tersimpan agar bisa disambungkan ulang dengan cepat.',
     );
   }

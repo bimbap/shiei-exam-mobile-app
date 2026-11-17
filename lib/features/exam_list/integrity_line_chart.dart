@@ -333,29 +333,32 @@ class _IntegrityLineChartPainter extends CustomPainter {
       ),
     );
 
-    // Floating two-line tooltip card (no icon, '|' separator) near crosshair
-    final headerParts = <String>[
-      selPoint.label,
-      if (selPoint.durationSummary.isNotEmpty) selPoint.durationSummary,
-      '${selPoint.value.round()}%',
-    ];
-    final tooltipHeader = headerParts.join(' | ');
+    // Floating two-line tooltip card (Opsi C: exam title + duration | status, no icons or %)
+    final tooltipHeader = selPoint.title.trim().isNotEmpty
+        ? selPoint.title.trim()
+        : selPoint.label;
     final headerTp = TextPainter(
       text: TextSpan(
         text: tooltipHeader,
         style: TextStyle(
-          fontSize: 10.2,
+          fontSize: 10.4,
           fontWeight: FontWeight.w800,
           color: isDark ? Colors.white : const Color(0xFF0F172A),
         ),
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,
+      ellipsis: '…',
     )..layout(maxWidth: math.max(120.0, plotWidth - 20));
 
+    final tooltipSubParts = <String>[
+      if (selPoint.durationSummary.isNotEmpty) selPoint.durationSummary,
+      selPoint.statusText,
+    ];
+    final tooltipSub = tooltipSubParts.join(' | ');
     final statusTp = TextPainter(
       text: TextSpan(
-        text: selPoint.statusText,
+        text: tooltipSub,
         style: TextStyle(
           fontSize: 9.3,
           fontWeight: FontWeight.w600,
@@ -364,6 +367,7 @@ class _IntegrityLineChartPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
       maxLines: 1,
+      ellipsis: '…',
     )..layout(maxWidth: math.max(120.0, plotWidth - 20));
 
     const hPad = 9.0;

@@ -134,8 +134,8 @@ void main() {
             title: 'Ujian ${i + 1}',
             subject: 'MAT',
             statusText: i == 3 ? 'Selesai | 1 Peringatan' : 'Tertib | 0 Peringatan',
-            durationSummary: i == 3 ? '38m / 60m' : '54m / 60m',
-            value: i == 3 ? 64.0 : 90.0,
+            durationSummary: i == 3 ? '1j 25m' : '48m',
+            value: i == 3 ? 85.0 : 100.0,
             color: i == 3 ? const Color(0xFFF59E0B) : AppTheme.accentGreen,
             rawItem: const {},
           ),
@@ -239,6 +239,56 @@ void main() {
     );
 
     testWidgets(
+      'SettingsScreen disconnect dialog stacks full-width aligned buttons and purges session cleanly',
+      (tester) async {
+        await TokenStorage.setKeepBrowserLoginEnabled(true);
+        await TokenStorage.saveBrowserLoginMeta(
+          connected: true,
+          label: 'Akun Google',
+          email: 'mi1122320@gmail.com',
+          url: 'https://docs.google.com/forms',
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: const SettingsScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Putuskan'));
+        await tester.pumpAndSettle();
+
+        final purgeBtn = find.widgetWithText(ElevatedButton, 'Putuskan & Hapus Sesi');
+        final softBtn = find.widgetWithText(OutlinedButton, 'Lepas Saja (Simpan Sesi)');
+        final cancelBtn = find.widgetWithText(TextButton, 'Batal');
+        expect(purgeBtn, findsOneWidget);
+        expect(softBtn, findsOneWidget);
+        expect(cancelBtn, findsOneWidget);
+
+        final r1 = tester.getRect(purgeBtn);
+        final r2 = tester.getRect(softBtn);
+        final r3 = tester.getRect(cancelBtn);
+        expect((r1.width - r2.width).abs(), lessThan(1.0));
+        expect((r2.width - r3.width).abs(), lessThan(1.0));
+        expect(r2.top, greaterThanOrEqualTo(r1.bottom));
+        expect(r3.top, greaterThanOrEqualTo(r2.bottom));
+
+        await tester.tap(purgeBtn);
+        await tester.pumpAndSettle();
+
+        expect(await TokenStorage.isKeepBrowserLoginEnabled(), false);
+        expect((await TokenStorage.getBrowserLoginMeta())['connected'], false);
+        expect(await TokenStorage.getSavedBrowserEmails(), isEmpty);
+        expect(
+          await TokenStorage.getHiddenDeviceGoogleEmails(),
+          ['mi1122320@gmail.com'],
+        );
+      },
+    );
+
+    testWidgets(
       'OnboardingScreen renders cleanly without overflow on 320x568 short screen',
       (tester) async {
         tester.view.physicalSize = const Size(320, 568);
@@ -333,11 +383,23 @@ void main() {
         expect(find.text('siswa.two@gmail.com'), findsOneWidget);
         expect(find.text('Masuk dengan Akun Google Lain'), findsOneWidget);
 
-        // Delete active/first account using delete button
+        // Delete active/first account using delete button -> triggers confirmation alert
         await tester.tap(find.byIcon(Icons.delete_outline_rounded).first);
         await tester.pumpAndSettle();
+        expect(find.text('Putuskan & Hapus Akun?'), findsOneWidget);
+        await tester.tap(find.text('Ya, Putuskan'));
+        await tester.pumpAndSettle();
+
         expect(find.text('siswa.two@gmail.com'), findsNothing);
         expect((await TokenStorage.getBrowserLoginMeta())['connected'], false);
+        expect(
+          await TokenStorage.getSavedBrowserEmails(),
+          ['siswa.one@gmail.com'],
+        );
+        expect(
+          await TokenStorage.getHiddenDeviceGoogleEmails(),
+          ['siswa.two@gmail.com'],
+        );
 
         // Tap "Masuk dengan Akun Google Lain"
         await tester.tap(find.text('Masuk dengan Akun Google Lain'));

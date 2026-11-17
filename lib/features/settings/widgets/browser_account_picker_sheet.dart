@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/auth/token_storage.dart';
 import '../../../core/lockdown/volume_lock_service.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../exam_player/url_exam_player.dart';
 
 /// Custom SHIEI bottom sheet for managing and selecting Google accounts
 /// purely inside the app's themed UI (never triggers the white OS dialog).
@@ -16,6 +17,8 @@ class BrowserAccountPickerSheet {
     final savedList = await TokenStorage.getSavedBrowserEmails();
     final hiddenSet =
         (await TokenStorage.getHiddenDeviceGoogleEmails()).toSet();
+    final meta = await TokenStorage.getBrowserLoginMeta();
+    final isMetaConnected = meta['connected'] == true;
 
     List<String> deviceList = const [];
     if (Platform.isAndroid) {
@@ -34,7 +37,7 @@ class BrowserAccountPickerSheet {
     for (final raw in savedList) {
       final email = raw.trim();
       final lower = email.toLowerCase();
-      if (email.isNotEmpty && seen.add(lower)) {
+      if (email.isNotEmpty && !hiddenSet.contains(lower) && seen.add(lower)) {
         merged.add(email);
       }
     }
@@ -46,12 +49,17 @@ class BrowserAccountPickerSheet {
       }
     }
 
-    final initialActive = currentEmail?.trim().toLowerCase();
+    final resolvedCurrent = isMetaConnected
+        ? (currentEmail?.trim().isNotEmpty == true
+            ? currentEmail!.trim()
+            : meta['email']?.toString().trim())
+        : null;
+    final initialActive = resolvedCurrent?.toLowerCase();
     if (initialActive != null &&
         initialActive.isNotEmpty &&
         !hiddenSet.contains(initialActive) &&
         seen.add(initialActive)) {
-      merged.insert(0, currentEmail!.trim());
+      merged.insert(0, resolvedCurrent!);
     }
 
     return await showModalBottomSheet<String>(
@@ -75,10 +83,112 @@ class BrowserAccountPickerSheet {
           builder: (ctx, setSheetState) {
             Future<void> removeEmail(String email) async {
               final lower = email.trim().toLowerCase();
+              final isActiveTarget =
+                  activeLower != null && lower == activeLower;
+
+              final confirmed = await showDialog<bool>(
+                context: sheetCtx,
+                builder: (dlgCtx) => AlertDialog(
+                  backgroundColor: isDark ? AppTheme.surfaceDark : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  title: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.dangerRed.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isActiveTarget
+                              ? Icons.link_off_rounded
+                              : Icons.delete_outline_rounded,
+                          color: AppTheme.dangerRed,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          isActiveTarget
+                              ? 'Putuskan & Hapus Akun?'
+                              : 'Hapus Akun dari Daftar?',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: titleColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: Text(
+                    isActiveTarget
+                        ? 'Akun $email saat ini terhubung di peramban ujian.\n\nMemutuskan akan menghapus sesi & cookie web secara permanen serta menghilangkannya dari daftar pilih cepat.'
+                        : 'Akun $email akan dihapus dari daftar pilih cepat SHIEI. Anda tetap bisa login lagi kapan saja.',
+                    style: TextStyle(
+                      fontSize: 12.2,
+                      height: 1.45,
+                      color: subColor,
+                    ),
+                  ),
+                  actionsPadding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+                  actions: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 42),
+                              foregroundColor: titleColor,
+                              side: BorderSide(color: sheetBorder),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(dlgCtx, false),
+                            child: const Text(
+                              'Batal',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 42),
+                              backgroundColor: AppTheme.dangerRed,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(dlgCtx, true),
+                            child: Text(
+                              isActiveTarget ? 'Ya, Putuskan' : 'Ya, Hapus',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirmed != true || !sheetCtx.mounted) return;
+
               await TokenStorage.removeSavedBrowserEmail(lower);
               await TokenStorage.hideDeviceGoogleEmail(lower);
-              if (activeLower != null && lower == activeLower) {
+              if (isActiveTarget) {
+                await UrlExamPlayer.clearBrowserSessionCookies();
                 await TokenStorage.clearBrowserLoginMeta();
+                await TokenStorage.setKeepBrowserLoginEnabled(false);
                 activeLower = null;
               }
               setSheetState(() {
