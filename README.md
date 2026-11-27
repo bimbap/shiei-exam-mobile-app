@@ -1,18 +1,21 @@
-# Shiei Exam Mobile • High-Security Kiosk & Proctor Client
+<p align="center">
+  <img src="assets/images/readme-banner.png" alt="Shiei Exam Mobile — Dedicated Examination Client for Android & iOS" width="100%" />
+</p>
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-[![Dart](https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-green?style=for-the-badge)](https://flutter.dev)
-[![License](https://img.shields.io/badge/License-Proprietary-blue?style=for-the-badge)](LICENSE)
+<p align="center">
+  <a href="https://flutter.dev"><img src="https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white" alt="Flutter" /></a>
+  <a href="https://dart.dev"><img src="https://img.shields.io/badge/Dart-3.x-0175C2?style=for-the-badge&logo=dart&logoColor=white" alt="Dart" /></a>
+  <img src="https://img.shields.io/badge/Platform-Android%20%7C%20iOS-16A34A?style=for-the-badge" alt="Platform" />
+  <a href="https://github.com/bimbap/shiei-exam-mobile-app/releases"><img src="https://img.shields.io/badge/Release-v2.7.0-EA580C?style=for-the-badge" alt="Release v2.7.0" /></a>
+</p>
 
-> **市衛 • 誠実を守り、規律ある試験へ。**  
-> *Project SHIEI • Menjaga Integritas, Mengawal Kejujuran Ujian.*  
+> *Project SHIEI — Menjaga Integritas, Mengawal Kejujuran Ujian.*
 
 ---
 
 ## 📌 Overview
 
-**Shiei Exam Mobile** is the dedicated student examination and on-the-go teacher proctoring application for **Project SHIEI**. Built with Flutter, it operates as a hardened **Kiosk Application** that prevents academic fraud by actively enforcing device integrity, blocking multitasking, and providing proctors with immediate mobile control.
+**Shiei Exam Mobile** is the dedicated student examination and on-the-go teacher proctoring application for **Project SHIEI**. Built with Flutter for Android and iOS, it provides a distraction-free testing environment for students while giving proctors immediate mobile oversight and real-time session management.
 
 ---
 
