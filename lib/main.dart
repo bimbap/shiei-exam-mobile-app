@@ -243,20 +243,22 @@ class _SplashScreenState extends State<SplashScreen> {
               width: 92,
               height: 92,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    AppTheme.primaryShiei.withValues(alpha: 0.28),
-                    Colors.transparent,
-                  ],
-                ),
+                borderRadius: BorderRadius.circular(23),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: ClipOval(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(23),
                 child: Image.asset(
                   'assets/images/shiei_logo.png',
                   width: 92,
                   height: 92,
-                  fit: BoxFit.cover,
+                  fit: BoxFit.contain,
                   errorBuilder: (_, __, ___) => const Icon(
                     Icons.shield_rounded,
                     size: 46,

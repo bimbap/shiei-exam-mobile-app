@@ -43,13 +43,16 @@ class ShieiBrandLogo extends StatelessWidget {
               ),
             ],
           ),
-          child: Image.asset(
-            'assets/images/shiei_logo.png',
-            fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => Icon(
-              Icons.shield_rounded,
-              size: logoSize * 0.75,
-              color: AppTheme.primaryGlow,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(logoSize * 0.25),
+            child: Image.asset(
+              'assets/images/shiei_logo.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.shield_rounded,
+                size: logoSize * 0.75,
+                color: AppTheme.primaryGlow,
+              ),
             ),
           ),
         ),
