@@ -1647,7 +1647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Platform ujian browser terproteksi dengan kiosk lockdown, deteksi split-screen, proteksi panggilan suara, dan sesi tunggal aktif (single active session).',
+                  'Aplikasi ujian digital sekolah yang mengunci layar perangkat selama ujian berlangsung, mencegah keluar aplikasi atau layar terbagi, serta menjaga setiap sesi ujian tetap tertib dan jujur.',
                   style: TextStyle(fontSize: 12, color: textColor, height: 1.4),
                 ),
                 Divider(color: dividerColor, height: 22),
