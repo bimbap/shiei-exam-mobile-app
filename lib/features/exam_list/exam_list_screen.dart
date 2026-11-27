@@ -1129,7 +1129,13 @@ class _ExamListScreenState extends State<ExamListScreen> {
       return;
     }
 
-    if (exam['is_available'] != true || exam['url'] == null) {
+    final bool requiresToken = (exam['requires_token'] == true) ||
+        (exam['token'] != null &&
+            exam['token'].toString().trim().isNotEmpty &&
+            exam['token_mode'] != 'none') ||
+        exam['token_mode'] == 'rotating_5m';
+
+    if (exam['is_available'] != true || (!requiresToken && exam['url'] == null)) {
       AppNotification.showWarning(
         context,
         'Ujian Belum Tersedia',
@@ -4357,9 +4363,11 @@ class _ExamListScreenState extends State<ExamListScreen> {
 
     final rawToken = exam['token'];
     final tokenMode = exam['token_mode'];
-    final bool requiresToken = (rawToken != null &&
-        rawToken.toString().trim().isNotEmpty &&
-        tokenMode != 'none') || tokenMode == 'rotating_5m';
+    final bool requiresToken = (exam['requires_token'] == true) ||
+        (rawToken != null &&
+            rawToken.toString().trim().isNotEmpty &&
+            tokenMode != 'none') ||
+        tokenMode == 'rotating_5m';
 
     String tokenModeLabel;
     IconData tokenModeIcon;
