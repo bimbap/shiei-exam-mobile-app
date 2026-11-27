@@ -95,6 +95,15 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 
     // If APK is already downloaded, try to install directly without re-downloading
     if (_cachedApkPath != null && File(_cachedApkPath!).existsSync()) {
+      final storageErr = await AppUpdateService.instance.checkStorageForInstall(_cachedApkPath!);
+      if (storageErr != null && mounted) {
+        setState(() {
+          _isDownloading = false;
+          _errorMessage = storageErr;
+          _statusText = 'Penyimpanan HP tidak mencukupi.';
+        });
+        return;
+      }
       final canInstall = await AppUpdateService.instance.canRequestPackageInstalls();
       if (!canInstall && mounted) {
         await AppUpdateService.instance.openInstallPermissionSettings();
@@ -215,6 +224,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       targetVersion: widget.updateInfo.latestVersion,
       targetBuild: widget.updateInfo.latestBuild,
       expectedSha256: widget.updateInfo.checksumSha256,
+      expectedSizeHint: widget.updateInfo.fileSize,
       onProgress: (received, total) {
         if (!mounted) return;
         setState(() {
@@ -237,6 +247,16 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 
     if (apkPath != null && apkPath.isNotEmpty) {
       _cachedApkPath = apkPath;
+      final storageErr = await AppUpdateService.instance.checkStorageForInstall(apkPath);
+      if (storageErr != null && mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadProgress = 1.0;
+          _errorMessage = storageErr;
+          _statusText = 'Penyimpanan HP tidak mencukupi.';
+        });
+        return;
+      }
       setState(() {
         _isDownloading = false;
         _downloadProgress = 1.0;
@@ -252,11 +272,13 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
       }
     } else {
       await AppUpdateService.instance.cleanupCachedApks();
+      final errMsg = AppUpdateService.instance.lastDownloadError ??
+          'Gagal mengunduh atau memverifikasi berkas APK. Periksa tautan rilis atau koneksi internet.';
+      final isStorageIssue = errMsg.toLowerCase().contains('memori hp');
       setState(() {
         _isDownloading = false;
-        _errorMessage = AppUpdateService.instance.lastDownloadError ??
-            'Gagal mengunduh atau memverifikasi berkas APK. Periksa tautan rilis atau koneksi internet.';
-        _statusText = 'Unduhan atau verifikasi gagal.';
+        _errorMessage = errMsg;
+        _statusText = isStorageIssue ? 'Penyimpanan HP tidak mencukupi.' : 'Unduhan atau verifikasi gagal.';
       });
     }
   }

@@ -5,6 +5,15 @@ All notable changes to **Shiei Exam Mobile (`shiei_kiosk`)** will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - Next Release
+
+### Added
+- **Low-Storage OTA Guard**: Added automatic free-space checks before downloading and installing app updates, partial file cleanup on failure, and explicit low-storage warnings.
+
+### Fixed
+- **Browser Multi-Account Switching**: Resolved session auto-close issues when switching or adding another Google account in browser login settings.
+- **Role Selection Boundaries & Form Guard**: Enforced strict role-based selection restrictions and disabled unchanged edit-form saves until modifications are made.
+
 ## [2.6.0] - 2026-11-15
 
 ### Added

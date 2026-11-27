@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
@@ -57,7 +58,7 @@ void main() {
   test('VersionChangelog parses categories correctly', () {
     final changelogs = AppUpdateService.fallbackChangelogs;
     expect(changelogs.isNotEmpty, isTrue);
-    expect(changelogs.first.version, equals('2.6.2'));
+    expect(changelogs.first.version, equals('2.7.0'));
     expect(changelogs.first.isLatest, isTrue);
     expect(changelogs.first.categories.length, equals(3));
     expect(changelogs.first.categories.first.name, equals('Fitur Baru'));
@@ -80,13 +81,13 @@ void main() {
     expect(AppUpdateService.compareVersions('2.6.0', '2.5.9'), greaterThan(0));
 
     final enforcedByMinVersion = AppUpdateInfo.fromJson({
-      'client_version': '2.6.2',
-      'latest_version': '2.7.0',
+      'client_version': '2.7.0',
+      'latest_version': '2.8.0',
       'latest_build': 12,
       'has_update': false,
       'force_update': false,
       'is_mandatory': false,
-      'min_supported_version': '2.7.0',
+      'min_supported_version': '2.8.0',
       'checksum_sha256': 'A' * 64,
       'download_url': 'https://example.com/shiei.apk',
     });
@@ -95,9 +96,9 @@ void main() {
     expect(AppUpdateService.instance.isForceUpdateRequired(enforcedByMinVersion), isTrue);
 
     final sameVersionForced = AppUpdateInfo.fromJson({
-      'client_version': '2.6.2',
-      'latest_version': '2.6.2',
-      'latest_build': 8,
+      'client_version': '2.7.0',
+      'latest_version': '2.7.0',
+      'latest_build': 9,
       'has_update': true,
       'force_update': true,
       'is_mandatory': true,
@@ -110,9 +111,9 @@ void main() {
     expect(normalizedSame.forceUpdate, isFalse);
 
     final optionalUpdate = AppUpdateInfo(
-      clientVersion: '2.6.2',
-      latestVersion: '2.6.3',
-      latestBuild: 9,
+      clientVersion: '2.7.0',
+      latestVersion: '2.7.1',
+      latestBuild: 10,
       hasUpdate: true,
       forceUpdate: false,
       isMandatory: false,
@@ -157,5 +158,69 @@ void main() {
     expect(find.text('Catatan Rilis & Pembaruan'), findsOneWidget);
     expect(find.text('Versi Aplikasi Terpasang'), findsOneWidget);
     expect(find.text('Daftar Riwayat Rilis'), findsOneWidget);
+  });
+
+  test('parseExpectedSizeBytes and isDiskFullError handle size labels and ENOSPC', () {
+    expect(AppUpdateService.parseExpectedSizeBytes('85.7 MB'), (85.7 * 1024 * 1024).round());
+    expect(AppUpdateService.parseExpectedSizeBytes('1,5 GB'), (1.5 * 1024 * 1024 * 1024).round());
+    expect(AppUpdateService.parseExpectedSizeBytes('512 KB'), 512 * 1024);
+    expect(AppUpdateService.parseExpectedSizeBytes('invalid'), isNull);
+
+    expect(
+      AppUpdateService.isDiskFullError(
+        const FileSystemException('Write failed', '/tmp/a.apk', OSError('No space left on device', 28)),
+      ),
+      isTrue,
+    );
+    expect(AppUpdateService.isDiskFullError(Exception('Network timeout')), isFalse);
+  });
+
+  test('downloadApk aborts cleanly with clear message when available storage is insufficient', () async {
+    final tmpDir = Directory.systemTemp.createTempSync('shiei_storage_test_');
+    addTearDown(() {
+      if (tmpDir.existsSync()) tmpDir.deleteSync(recursive: true);
+    });
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+      log.add(methodCall);
+      if (methodCall.method == 'getAppCacheDir') return tmpDir.path;
+      if (methodCall.method == 'getAvailableStorageBytes') return 50 * 1024 * 1024; // 50 MB free
+      return null;
+    });
+
+    final result = await AppUpdateService.instance.downloadApk(
+      'https://github.com/bimbap/shiei-exam-mobile-app/releases/download/v2.6.2/test.apk',
+      expectedSha256: 'a' * 64,
+      expectedSizeHint: '85.7 MB',
+      onProgress: (_, __) {},
+    );
+
+    expect(result, isNull);
+    expect(AppUpdateService.instance.lastDownloadError, contains('Memori HP tidak cukup'));
+    expect(AppUpdateService.instance.lastDownloadError, contains('Tersedia 50 MB'));
+  });
+
+  test('checkStorageForInstall blocks install when free headroom is below 1.25x APK size', () async {
+    final tmpDir = Directory.systemTemp.createTempSync('shiei_install_space_');
+    addTearDown(() {
+      if (tmpDir.existsSync()) tmpDir.deleteSync(recursive: true);
+    });
+    final fakeApk = File('${tmpDir.path}/sample.apk')
+      ..writeAsBytesSync(List<int>.filled(4 * 1024 * 1024, 0));
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+      if (methodCall.method == 'getAvailableStorageBytes') return 4 * 1024 * 1024; // Only 4 MB free for 4 MB APK
+      return null;
+    });
+    expect(await AppUpdateService.instance.checkStorageForInstall(fakeApk.path), contains('Memori HP terlalu penuh'));
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
+      if (methodCall.method == 'getAvailableStorageBytes') return 10 * 1024 * 1024; // 10 MB free (>= 5 MB needed)
+      return null;
+    });
+    expect(await AppUpdateService.instance.checkStorageForInstall(fakeApk.path), isNull);
   });
 }

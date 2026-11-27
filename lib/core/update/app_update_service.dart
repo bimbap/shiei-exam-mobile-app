@@ -114,8 +114,8 @@ class AppUpdateService {
   static const MethodChannel _platformChannel = MethodChannel('id.shiei/lockdown');
   final ApiClient _api = ApiClient();
 
-  static String _runtimeAppVersion = '2.6.2';
-  static int _runtimeAppBuild = 8;
+  static String _runtimeAppVersion = '2.7.0';
+  static int _runtimeAppBuild = 9;
 
   static String get currentAppVersion => _runtimeAppVersion;
   static int get currentAppBuild => _runtimeAppBuild;
@@ -162,10 +162,40 @@ class AppUpdateService {
   // Local fallback changelogs to ensure offline availability
   static final List<VersionChangelog> fallbackChangelogs = [
     VersionChangelog(
+      version: '2.7.0',
+      buildNumber: '2026.9',
+      releaseDate: '18 November 2026',
+      isLatest: true,
+      title: 'Pembaruan Aplikasi v2.7.0',
+      headline: 'Pembaruan v2.7.0 menghadirkan proteksi ruang penyimpanan otomatis saat update OTA serta peningkatan keamanan pergantian akun & validasi form.',
+      categories: [
+        ChangelogCategory(
+          name: 'Fitur Baru',
+          items: [
+            'Proteksi Ruang Penyimpanan OTA: Pemeriksaan otomatis kapasitas penyimpanan HP sebelum mengunduh dan memasang pembaruan.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Keamanan & Kenyamanan Ujian',
+          items: [
+            'Perlindungan Hak Akses Data Sekolah: Pembatasan seleksi massal antar pengajar dan isolasi pengelolaan kelas.',
+            'Validasi Form Edit Ketat: Tombol simpan tetap nonaktif hingga ada perubahan nyata pada data.',
+          ],
+        ),
+        ChangelogCategory(
+          name: 'Peningkatan & Perbaikan',
+          items: [
+            'Perbaikan Ganti Akun Google Browser: Mendukung penambahan dan pergantian akun Google lain tanpa terjebak sesi lama.',
+            'Pesan Error Penyimpanan Akurat: Notifikasi jelas saat memori HP penuh serta pembersihan file unduhan parsial otomatis.',
+          ],
+        ),
+      ],
+    ),
+    VersionChangelog(
       version: '2.6.2',
       buildNumber: '2026.8',
       releaseDate: '17 November 2026',
-      isLatest: true,
+      isLatest: false,
       title: 'Pembaruan Aplikasi v2.6.2',
       headline: 'Pembaruan v2.6.2 menghadirkan mode browser Incognito sebagai default, pengelola akun Google khusus di dalam aplikasi, grafik kedisiplinan interaktif, dan sinkronisasi versi otomatis.',
       categories: [
@@ -672,12 +702,79 @@ class AppUpdateService {
     }
   }
 
+  /// Parse human-readable file size strings (e.g. "85.7 MB", "1.2 GB") into bytes.
+  static int? parseExpectedSizeBytes(String? rawSize) {
+    if (rawSize == null) return null;
+    final match = RegExp(
+      r'([0-9]+(?:[.,][0-9]+)?)\s*(KB|MB|GB|B)\b',
+      caseSensitive: false,
+    ).firstMatch(rawSize.trim());
+    if (match == null) return null;
+    final numeric = double.tryParse(match.group(1)!.replaceAll(',', '.'));
+    if (numeric == null || numeric <= 0) return null;
+    switch (match.group(2)!.toUpperCase()) {
+      case 'GB':
+        return (numeric * 1024 * 1024 * 1024).round();
+      case 'MB':
+        return (numeric * 1024 * 1024).round();
+      case 'KB':
+        return (numeric * 1024).round();
+      default:
+        return numeric.round();
+    }
+  }
+
+  /// Detects OS-level out-of-space / ENOSPC write failures during APK download.
+  static bool isDiskFullError(Object error) {
+    if (error is DioException && error.error != null && isDiskFullError(error.error!)) {
+      return true;
+    }
+    if (error is FileSystemException) {
+      // POSIX ENOSPC = 28 (Android/Linux), Windows ERROR_DISK_FULL = 112
+      final code = error.osError?.errorCode;
+      if (code == 28 || code == 112) return true;
+    }
+    final msg = error.toString().toLowerCase();
+    return msg.contains('no space left') ||
+        msg.contains('enospc') ||
+        msg.contains('not enough space') ||
+        msg.contains('disk full') ||
+        msg.contains('insufficient storage');
+  }
+
+  /// Queries available storage bytes on the active cache partition (Android StatFs).
+  Future<int?> getAvailableStorageBytes() async {
+    try {
+      final raw = await _platformChannel.invokeMethod<num>('getAvailableStorageBytes');
+      return raw?.toInt();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Validates free space required to extract and install a downloaded APK safely.
+  Future<String?> checkStorageForInstall(String apkPath) async {
+    final file = File(apkPath);
+    if (!file.existsSync()) return null;
+    final availBytes = await getAvailableStorageBytes();
+    if (availBytes == null) return null;
+    // Android PackageInstaller needs extra headroom (~1.25x APK) to unpack native libs & ART cache.
+    final neededBytes = (file.lengthSync() * 1.25).ceil();
+    if (availBytes < neededBytes) {
+      final availMb = (availBytes / (1024 * 1024)).toStringAsFixed(0);
+      final neededMb = (neededBytes / (1024 * 1024)).toStringAsFixed(0);
+      return 'Memori HP terlalu penuh untuk memasang pembaruan. Tersedia $availMb MB, butuh minimal $neededMb MB ruang bebas.';
+    }
+    return null;
+  }
+
   /// Download APK directly inside the app with real-time byte progress and SHA-256 verification.
   Future<String?> downloadApk(
     String url, {
     String targetVersion = '',
     int targetBuild = 0,
     String? expectedSha256,
+    String? expectedSizeHint,
     required void Function(int received, int total) onProgress,
   }) async {
     lastDownloadError = null;
@@ -696,6 +793,7 @@ class AppUpdateService {
       return null;
     }
 
+    String? savePath;
     try {
       String? dirPath;
       try {
@@ -703,13 +801,29 @@ class AppUpdateService {
       } catch (_) {}
       final baseDir = (dirPath != null && dirPath.isNotEmpty) ? Directory(dirPath) : Directory.systemTemp;
 
-      // Clean up previous APKs to avoid storage bloat
+      // Clean up previous APKs before checking free storage to prevent false positives.
       await cleanupCachedApks();
+
+      final availBytes = await getAvailableStorageBytes();
+      if (availBytes != null) {
+        final expectedBytes = parseExpectedSizeBytes(expectedSizeHint);
+        // Reserve 2.2x APK size (APK file + Android extraction/install overhead), fallback 120 MB.
+        final requiredBytes = expectedBytes != null && expectedBytes > 0
+            ? (expectedBytes * 2.2).ceil()
+            : 120 * 1024 * 1024;
+        if (availBytes < requiredBytes) {
+          final availMb = (availBytes / (1024 * 1024)).toStringAsFixed(0);
+          final needMb = (requiredBytes / (1024 * 1024)).toStringAsFixed(0);
+          lastDownloadError =
+              'Memori HP tidak cukup untuk update. Tersedia $availMb MB, butuh minimal $needMb MB ruang bebas. Hapus file/aplikasi lain lalu coba lagi.';
+          return null;
+        }
+      }
 
       final filename = (targetVersion.isNotEmpty && targetBuild > 0)
           ? 'shiei-kiosk-v$targetVersion-b$targetBuild.apk'
           : 'shiei-kiosk-update.apk';
-      final savePath = '${baseDir.path}/$filename';
+      savePath = '${baseDir.path}/$filename';
 
       final dio = Dio(
         BaseOptions(
@@ -738,7 +852,15 @@ class AppUpdateService {
       }
     } catch (e) {
       debugPrint('[AppUpdateService] Direct APK download failed: $e');
-      lastDownloadError = 'Gagal mengunduh berkas APK. Periksa tautan rilis atau koneksi internet.';
+      if (savePath != null) {
+        try {
+          final partial = File(savePath);
+          if (partial.existsSync()) partial.deleteSync();
+        } catch (_) {}
+      }
+      lastDownloadError = isDiskFullError(e)
+          ? 'Memori HP penuh saat mengunduh pembaruan. Hapus beberapa file/aplikasi lalu coba lagi.'
+          : 'Gagal mengunduh berkas APK. Periksa tautan rilis atau koneksi internet.';
     }
     return null;
   }

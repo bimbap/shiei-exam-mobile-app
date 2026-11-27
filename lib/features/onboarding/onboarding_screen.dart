@@ -386,7 +386,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Selamat Datang di Shiei Exam',
       description:
           'Halo! Saya pengawas digitalmu. Saya akan mendampingi dan memastikan seluruh ujianmu berlangsung aman, tertib, dan lancar.',
-      imageAsset: 'assets/images/shiei_proctor_female_half.jpg',
+      imageAsset: 'assets/images/shiei_proctor_female_half.webp',
     );
   }
 
@@ -434,7 +434,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
             ),
             child: ClipOval(
               child: Image.asset(
-                'assets/images/shiei_mascot_theme.jpg',
+                'assets/images/shiei_mascot_theme.webp',
                 fit: BoxFit.cover,
                 cacheWidth: 360,
                 errorBuilder: (_, __, ___) => const Icon(
@@ -670,7 +670,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Aktifkan Izin Notifikasi',
       description:
           'Dapatkan ralat soal seketika dari pengawas saat ujian berlangsung, serta pengingat jadwal ujian H-1 dan 30 menit sebelum mulai.',
-      imageAsset: 'assets/images/shiei_mascot_notif_female.jpg',
+      imageAsset: 'assets/images/shiei_mascot_notif_female.webp',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
         child: _isNotificationGranted
@@ -724,7 +724,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Izinkan Pembaruan Otomatis',
       description:
           'Agar Shiei Exam selalu mendapatkan pembaruan sistem dan keamanan terbaru dari sekolah secara instan tanpa perlu download manual dari browser.',
-      imageAsset: 'assets/images/shiei_mascot_student_female.jpg',
+      imageAsset: 'assets/images/shiei_mascot_student_female.webp',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
         child: _canInstallPackages
@@ -778,7 +778,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
       title: 'Akses Daftar Akun Perangkat',
       description:
           'Wajib diaktifkan sebelum memilih mode peramban ujian agar SHIEI dapat membaca daftar akun Google perangkat dengan aman di dalam aplikasi tanpa dialog bawaan OS.',
-      imageAsset: 'assets/images/shiei_mascot_contacts.jpg',
+      imageAsset: 'assets/images/shiei_mascot_contacts.webp',
       extraContent: Container(
         margin: const EdgeInsets.only(top: 18),
         child: _hasContactsPermission
@@ -909,7 +909,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
                   ),
                   child: ClipOval(
                     child: Image.asset(
-                      'assets/images/shiei_mascot_browser_glasses.jpg',
+                      'assets/images/shiei_mascot_browser_glasses.webp',
                       fit: BoxFit.cover,
                       cacheWidth: 360,
                       errorBuilder: (_, __, ___) => const Icon(
@@ -1137,7 +1137,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> with WidgetsBinding
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Image.asset(
-                  'assets/images/shiei_quad_banner.jpg',
+                  'assets/images/shiei_quad_banner.webp',
                   fit: BoxFit.cover,
                   cacheWidth: 800,
                 ),

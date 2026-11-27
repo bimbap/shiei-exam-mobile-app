@@ -62,6 +62,10 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["appName"] = "Shiei Exam"
         buildConfigField("String", "EXPECTED_SIGNING_SHA256", "\"$expectedSigningSha256\"")
+        // Ship ARM-only universal APK (arm64-v8a + armeabi-v7a); drops ~28 MB x86_64 emulator payload
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     signingConfigs {

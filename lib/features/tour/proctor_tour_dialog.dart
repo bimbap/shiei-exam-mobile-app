@@ -596,7 +596,7 @@ class _ProctorTourDialogState extends State<ProctorTourDialog> with TickerProvid
                           child: AspectRatio(
                             aspectRatio: 16 / 9,
                             child: Image.asset(
-                              'assets/images/shiei_quad_banner.jpg',
+                              'assets/images/shiei_quad_banner.webp',
                               fit: BoxFit.cover,
                               cacheWidth: 720,
                               errorBuilder: (_, __, ___) => Container(
@@ -945,11 +945,11 @@ class _ProctorTourDialogState extends State<ProctorTourDialog> with TickerProvid
                             ),
                             child: ClipOval(
                               child: Image.asset(
-                                'assets/images/shiei_proctor_male_half.jpg',
+                                'assets/images/shiei_proctor_male_half.webp',
                                 fit: BoxFit.cover,
                                 cacheWidth: 120,
                                 errorBuilder: (_, __, ___) => Image.asset(
-                                  'assets/images/shiei_mascot_guide.jpg',
+                                  'assets/images/shiei_mascot_guide.webp',
                                   fit: BoxFit.cover,
                                 ),
                               ),
