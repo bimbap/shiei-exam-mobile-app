@@ -29,17 +29,17 @@ class ShieiBrandLogo extends StatelessWidget {
       mainAxisAlignment: mainAxisAlignment,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Shiei Torii / Shield Logo Mark
+        // Shiei Dual-Arc S Logo Mark
         Container(
           width: logoSize,
           height: logoSize,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(logoSize * 0.25),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primaryShiei.withOpacity(0.35),
-                blurRadius: logoSize * 0.35,
-                spreadRadius: 1,
+                color: Colors.black.withOpacity(dark ? 0.35 : 0.14),
+                blurRadius: logoSize * 0.28,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
